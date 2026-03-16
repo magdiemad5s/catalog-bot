@@ -1,0 +1,508 @@
+2026-03-16 02:24:10 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 02:24:10 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 02:24:10 [INFO    ] discord.client: logging in using static token
+2026-03-16 02:24:11 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 02:24:11 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 02:24:11 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 02:24:11 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 02:24:11 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 02:24:12 [INFO    ] bot: Slash commands synced.
+2026-03-16 02:24:12 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 89154c7f09a8defad5c0a931128cd7a5).
+2026-03-16 02:24:14 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 02:24:22 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 404 Not Found"
+2026-03-16 02:24:22 [ERROR   ] cogs.levels: Rank command failed: {'message': "Could not find the table 'public.xp_profiles' in the schema cache", 'code': 'PGRST205', 'hint': None, 'details': None}
+2026-03-16 02:24:22 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 404 Not Found"
+2026-03-16 02:24:22 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 404 Not Found"
+2026-03-16 02:24:22 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 404 Not Found"
+2026-03-16 02:24:22 [ERROR   ] discord.client: Ignoring exception in on_message
+Traceback (most recent call last):
+  File "C:\Users\magdi\AppData\Local\Programs\Python\Python313\Lib\site-packages\discord\client.py", line 508, in _run_event
+    await coro(*args, **kwargs)
+  File "C:\Users\magdi\Documents\Coding projects\aitesting\catalog-bot\cogs\xp.py", line 310, in on_message
+    await self._award_xp(message, message.author, amount, is_voice=False)
+  File "C:\Users\magdi\Documents\Coding projects\aitesting\catalog-bot\cogs\xp.py", line 89, in _award_xp
+    res = db.table("xp_profiles").select("*").eq("guild_id", guild_id).eq("user_id", user_id).execute()
+  File "C:\Users\magdi\AppData\Local\Programs\Python\Python313\Lib\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.xp_profiles' in the schema cache", 'code': 'PGRST205', 'hint': None, 'details': None}
+2026-03-16 02:25:20 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:25:20 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:25:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:25:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.0&level_max=gte.0 "HTTP/2 200 OK"
+2026-03-16 02:25:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:25:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:25:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:25:21 [INFO    ] httpx: HTTP Request: POST https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles "HTTP/2 201 Created"
+2026-03-16 02:25:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:25:28 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:25:28 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:25:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:25:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:25:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:25:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.0&level_max=gte.0 "HTTP/2 200 OK"
+2026-03-16 02:25:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:25:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:26:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:26:31 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:26:31 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:26:31 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:26:31 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:26:31 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:26:31 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:26:37 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:26:37 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:26:37 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:26:37 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.0&level_max=gte.0 "HTTP/2 200 OK"
+2026-03-16 02:26:37 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:26:37 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:27:29 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 02:27:29 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 02:27:29 [INFO    ] discord.client: logging in using static token
+2026-03-16 02:27:30 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 02:27:30 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 02:27:30 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 02:27:30 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 02:27:30 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 02:27:30 [INFO    ] bot: Slash commands synced.
+2026-03-16 02:27:31 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 5d0c3eb1c61448b3d42354dfa4ea8acd).
+2026-03-16 02:27:33 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 02:27:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:27:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:27:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:27:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.0&level_max=gte.0 "HTTP/2 200 OK"
+2026-03-16 02:27:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:27:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:27:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:27:36 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:27:36 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:31:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:31:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:31:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:31:25 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:31:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:31:28 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:31:28 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:31:47 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=xp&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:31:47 [INFO    ] httpx: HTTP Request: POST https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles "HTTP/2 201 Created"
+2026-03-16 02:31:48 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:31:48 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:31:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:31:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:31:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:31:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.4&level_max=gte.4 "HTTP/2 200 OK"
+2026-03-16 02:31:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:31:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:32:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:32:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:32:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:32:25 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:32:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:32:51 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:32:51 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:32:51 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:32:51 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.4&level_max=gte.4 "HTTP/2 200 OK"
+2026-03-16 02:32:51 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:32:51 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:32:52 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:32:52 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:32:52 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:35:23 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 02:35:23 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 02:35:23 [INFO    ] discord.client: logging in using static token
+2026-03-16 02:35:24 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 02:35:24 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 02:35:24 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 02:35:24 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 02:35:24 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 02:35:24 [INFO    ] bot: Slash commands synced.
+2026-03-16 02:35:25 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 8c8dff18aed290a5373d18013bbbba0b).
+2026-03-16 02:35:27 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 02:35:41 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:35:41 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:35:41 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:35:41 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.4&level_max=gte.4 "HTTP/2 200 OK"
+2026-03-16 02:35:41 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:35:41 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:35:41 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:35:42 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:35:42 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.1&level_max=gte.1 "HTTP/2 200 OK"
+2026-03-16 02:35:42 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.0&level_max=gte.0 "HTTP/2 200 OK"
+2026-03-16 02:35:42 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:35:43 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:35:53 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:35:53 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:35:53 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:35:54 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.1&level_max=gte.1 "HTTP/2 200 OK"
+2026-03-16 02:35:54 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:35:54 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:41:03 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 02:41:03 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 02:41:03 [INFO    ] discord.client: logging in using static token
+2026-03-16 02:41:04 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 02:41:04 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 02:41:04 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 02:41:04 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 02:41:04 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 02:41:04 [INFO    ] bot: Slash commands synced.
+2026-03-16 02:41:05 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 10f964bf359dafed7bfb14d5ceee1980).
+2026-03-16 02:41:07 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 02:41:07 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 02:41:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:41:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 02:41:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 02:41:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.4&level_max=gte.4 "HTTP/2 200 OK"
+2026-03-16 02:41:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:41:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:41:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:41:34 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:41:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:52:24 [INFO    ] discord.gateway: Shard ID None has successfully RESUMED session 10f964bf359dafed7bfb14d5ceee1980.
+2026-03-16 02:57:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:57:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:57:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:57:35 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:57:36 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:57:46 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:57:46 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 02:57:53 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 02:57:53 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:19:16 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 03:19:16 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 03:19:16 [INFO    ] discord.client: logging in using static token
+2026-03-16 03:19:17 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 03:19:17 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 03:19:17 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 03:19:17 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 03:19:17 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 03:19:18 [INFO    ] bot: Slash commands synced.
+2026-03-16 03:19:18 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: d064d3f5e8e95ce3db5f1284af2ea223).
+2026-03-16 03:19:20 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 03:19:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 03:19:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:19:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:19:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:19:26 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:19:26 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:19:26 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/badge_roles?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:19:26 [INFO    ] httpx: HTTP Request: POST https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges "HTTP/2 201 Created"
+2026-03-16 03:19:43 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:19:43 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:19:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:19:46 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:20:48 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 03:20:48 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 03:20:48 [INFO    ] discord.client: logging in using static token
+2026-03-16 03:20:49 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 03:20:49 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 03:20:49 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 03:20:49 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 03:20:49 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 03:20:50 [INFO    ] bot: Slash commands synced.
+2026-03-16 03:20:50 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 15cbda79f5911f98f628cd8be8f09ebf).
+2026-03-16 03:20:52 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 03:20:53 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 03:23:15 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 03:23:15 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 03:23:15 [INFO    ] discord.client: logging in using static token
+2026-03-16 03:23:17 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 03:23:17 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 03:23:17 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 03:23:17 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 03:23:17 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 03:23:17 [INFO    ] bot: Slash commands synced.
+2026-03-16 03:23:18 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 894703878a41802748230b85debc1d99).
+2026-03-16 03:23:20 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 03:23:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 03:45:02 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:45:02 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:45:02 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:45:02 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:45:03 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:45:26 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:45:26 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:59:32 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=xp&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 03:59:33 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 03:59:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.0&level_max=gte.0 "HTTP/2 200 OK"
+2026-03-16 03:59:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.3&level_max=gte.3 "HTTP/2 200 OK"
+2026-03-16 03:59:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:59:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:59:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:59:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:59:33 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:59:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:59:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 03:59:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 03:59:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/badge_roles?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:59:35 [INFO    ] httpx: HTTP Request: POST https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges "HTTP/2 201 Created"
+2026-03-16 03:59:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 03:59:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id&guild_id=eq.1482705779697123378&order=xp.desc "HTTP/2 200 OK"
+2026-03-16 03:59:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 03:59:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.0&level_max=gte.0 "HTTP/2 200 OK"
+2026-03-16 03:59:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:59:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 03:59:55 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 03:59:55 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:00:05 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:00:05 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:00:23 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=xp&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:00:23 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:00:23 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.1&level_max=gte.1 "HTTP/2 200 OK"
+2026-03-16 04:00:23 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:00:23 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:00:23 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:00:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:00:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:01:09 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=xp&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:01:10 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:01:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.79&level_max=gte.79 "HTTP/2 200 OK"
+2026-03-16 04:01:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.0&level_max=gte.0 "HTTP/2 200 OK"
+2026-03-16 04:01:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:01:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:01:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:01:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:01:10 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:01:11 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:01:11 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:01:11 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:01:11 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=count&guild_id=eq.1482705779697123378&badge_key=eq.pioneer "HTTP/2 200 OK"
+2026-03-16 04:01:12 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/badge_roles?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:01:12 [INFO    ] httpx: HTTP Request: POST https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges "HTTP/2 201 Created"
+2026-03-16 04:03:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:03:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:03:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:03:10 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:03:10 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:03:10 [ERROR   ] bot: Unhandled error in help: Command raised an exception: NameError: name 'error_embed' is not defined
+NoneType: None
+2026-03-16 04:03:12 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:03:13 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:03:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:03:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:03:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:03:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:03:53 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:03:53 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:05:19 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 04:05:19 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 04:05:19 [INFO    ] discord.client: logging in using static token
+2026-03-16 04:05:20 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 04:05:20 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 04:05:20 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 04:05:20 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 04:05:20 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 04:05:20 [INFO    ] bot: Slash commands synced.
+2026-03-16 04:05:21 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: c0a1407047ed1ab99453bde4535758b8).
+2026-03-16 04:05:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:05:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:05:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:05:24 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:05:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.2&level_max=gte.2 "HTTP/2 200 OK"
+2026-03-16 04:05:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=%2A&guild_id=eq.1482705779697123378&level_min=lte.1&level_max=gte.1 "HTTP/2 200 OK"
+2026-03-16 04:05:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:05:25 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 04:05:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 04:05:25 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:05:32 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:05:32 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:14:32 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 04:14:32 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 04:14:32 [INFO    ] discord.client: logging in using static token
+2026-03-16 04:14:33 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 04:14:35 [INFO    ] cogs.ai: Gemini AI client successfully initialized.
+2026-03-16 04:14:35 [INFO    ] bot: Loaded cog: cogs.ai
+2026-03-16 04:14:35 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 04:14:35 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 04:14:35 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 04:14:35 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 04:14:35 [INFO    ] bot: Slash commands synced.
+2026-03-16 04:14:36 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: d5a7e79e13130b0ff2193b9a11bec2bc).
+2026-03-16 04:14:38 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 04:14:39 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 04:14:42 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:14:42 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:14:42 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:14:42 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:14:42 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:14:42 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:14:43 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent "HTTP/1.1 404 Not Found"
+2026-03-16 04:14:43 [ERROR   ] cogs.ai: Error generating Gemini response: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-3.0-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-03-16 04:14:55 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:14:55 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:14:55 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:14:56 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent "HTTP/1.1 404 Not Found"
+2026-03-16 04:14:56 [ERROR   ] cogs.ai: Error generating Gemini response: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-3.0-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-03-16 04:15:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:15:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:15:59 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:16:00 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:16:00 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:16:00 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=user_id%2Clevel&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:17:25 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 04:17:25 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 04:17:25 [INFO    ] discord.client: logging in using static token
+2026-03-16 04:17:26 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 04:17:28 [INFO    ] cogs.ai: Gemini AI client successfully initialized.
+2026-03-16 04:17:28 [INFO    ] bot: Loaded cog: cogs.ai
+2026-03-16 04:17:28 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 04:17:28 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 04:17:28 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 04:17:28 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 04:17:29 [INFO    ] bot: Slash commands synced.
+2026-03-16 04:17:29 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 32f50d08b18d03b747b91f4edf8dedf7).
+2026-03-16 04:17:31 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 04:17:32 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 04:17:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:17:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:17:33 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:17:34 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:17:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:17:34 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:17:35 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:17:49 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:17:49 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:17:49 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:17:50 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:17:56 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:17:57 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:17:57 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:17:57 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:18:07 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:18:07 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:18:07 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:18:45 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:19:17 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:19:17 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:19:17 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:19:17 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:19:17 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:19:18 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:19:58 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:20:09 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:20:09 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:20:09 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:20:09 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:20:09 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:20:09 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:20:11 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:20:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:20:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:20:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:20:35 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:20:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:20:36 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:20:36 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:20:44 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:20:44 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:20:44 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:20:45 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:25:44 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 04:25:44 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 04:25:44 [INFO    ] discord.client: logging in using static token
+2026-03-16 04:25:46 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 04:25:48 [INFO    ] cogs.ai: Gemini AI client successfully initialized.
+2026-03-16 04:25:48 [INFO    ] bot: Loaded cog: cogs.ai
+2026-03-16 04:25:48 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 04:25:48 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 04:25:48 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 04:25:48 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 04:25:48 [INFO    ] bot: Slash commands synced.
+2026-03-16 04:25:49 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: f19baa13b21882b511a76f10a1edbd14).
+2026-03-16 04:25:51 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 04:25:52 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 04:25:52 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:25:52 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:25:53 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:25:53 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:27:12 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 04:27:12 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 04:27:12 [INFO    ] discord.client: logging in using static token
+2026-03-16 04:27:14 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 04:27:16 [INFO    ] cogs.ai: Gemini AI client successfully initialized.
+2026-03-16 04:27:16 [INFO    ] bot: Loaded cog: cogs.ai
+2026-03-16 04:27:16 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 04:27:16 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 04:27:16 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 04:27:16 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 04:27:17 [INFO    ] bot: Slash commands synced.
+2026-03-16 04:27:18 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 47ad39a034c41696934b485decf333f1).
+2026-03-16 04:27:20 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 04:27:21 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 04:27:36 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:27:37 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:28:15 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:28:15 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:28:15 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:28:15 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:28:15 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:28:15 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:28:17 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:28:33 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:28:34 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:28:47 [WARNING ] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-16 04:28:47 [WARNING ] discord.client: davey is not installed, voice will NOT be supported
+2026-03-16 04:28:47 [INFO    ] discord.client: logging in using static token
+2026-03-16 04:28:48 [INFO    ] db.client: Supabase client initialised.
+2026-03-16 04:28:50 [INFO    ] cogs.ai: Gemini AI client successfully initialized.
+2026-03-16 04:28:50 [INFO    ] bot: Loaded cog: cogs.ai
+2026-03-16 04:28:50 [INFO    ] bot: Loaded cog: cogs.general
+2026-03-16 04:28:50 [INFO    ] bot: Loaded cog: cogs.levels
+2026-03-16 04:28:50 [INFO    ] bot: Loaded cog: cogs.moderation
+2026-03-16 04:28:50 [INFO    ] bot: Loaded cog: cogs.xp
+2026-03-16 04:28:51 [INFO    ] bot: Slash commands synced.
+2026-03-16 04:28:51 [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 0aaa555e7700cebca6a069a18cb32c6f).
+2026-03-16 04:28:53 [INFO    ] bot: Logged in as Catalog#0564 (ID: 1482728261422157865)
+2026-03-16 04:28:54 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/rank_tiers?select=level_min&guild_id=eq.1482705779697123378&limit=1 "HTTP/2 200 OK"
+2026-03-16 04:28:59 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:29:00 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:29:44 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:29:44 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:29:44 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:29:44 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:29:44 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:29:51 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:29:51 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:29:51 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:29:52 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:30:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:30:35 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:30:35 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:30:37 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:30:49 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:30:49 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:30:49 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:30:50 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:30:50 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.812169085772890152 "HTTP/2 200 OK"
+2026-03-16 04:30:50 [INFO    ] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-03-16 04:31:13 [INFO    ] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-03-16 04:31:44 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:31:44 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:31:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:31:45 [INFO    ] httpx: HTTP Request: POST https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles "HTTP/2 201 Created"
+2026-03-16 04:31:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:31:45 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/badge_roles?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:31:45 [INFO    ] httpx: HTTP Request: POST https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges "HTTP/2 201 Created"
+2026-03-16 04:32:04 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:32:04 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:32:04 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:32:04 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:32:04 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:32:05 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:32:05 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:32:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:32:24 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:32:26 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:32:26 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:32:36 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:32:36 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:33:14 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:33:14 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:33:14 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:33:14 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:33:14 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.1473975741665251440 "HTTP/2 200 OK"
+2026-03-16 04:33:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:33:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:33:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=%2A&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:33:30 [INFO    ] httpx: HTTP Request: PATCH https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:33:30 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/user_badges?select=badge_key&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
+2026-03-16 04:33:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_settings?select=%2A&guild_id=eq.1482705779697123378 "HTTP/2 200 OK"
+2026-03-16 04:33:34 [INFO    ] httpx: HTTP Request: GET https://tadbbmsotttrpoyzwgrx.supabase.co/rest/v1/xp_profiles?select=last_xp_at&guild_id=eq.1482705779697123378&user_id=eq.818373140576731156 "HTTP/2 200 OK"
