@@ -55,6 +55,19 @@ class LibraryBot(commands.Bot):
         else:
             log.info("Slash command sync skipped (--no-sync).")
 
+        # --- Web Panel ---
+        try:
+            from web import create_app
+            from aiohttp import web # type: ignore
+            self.web_app = create_app(self)
+            self.web_runner = web.AppRunner(self.web_app)
+            await self.web_runner.setup()
+            self.web_site = web.TCPSite(self.web_runner, '0.0.0.0', 8080)
+            await self.web_site.start()
+            log.info("Admin web panel running on port 8080 (http://0.0.0.0:8080/)")
+        except Exception as e:
+            log.error(f"Failed to start admin web panel: {e}")
+
     async def _load_cogs(self):
         """Auto-loads every *.py file inside the cogs/ directory."""
         cog_dir = os.path.join(os.path.dirname(__file__), self.config.cog_dir)

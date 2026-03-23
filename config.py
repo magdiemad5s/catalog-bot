@@ -25,6 +25,9 @@ class Config:
     supabase_url: str = ""
     supabase_key: str = ""
 
+    # ── Web Panel ─────────────────────────────────────────────────────────────
+    web_password: str = "admin123"
+
     # ── Moderation ────────────────────────────────────────────────────────────
     # Role ID required to run any moderation command.
     mod_role_id: int = 0
@@ -62,6 +65,8 @@ class Config:
         if not gemini_api_key:
             log.warning("GEMINI_API_KEY is not set — AI chat features will remain offline.")
 
+        web_password = os.getenv("WEB_PASSWORD", "admin123").strip()
+
         return cls(
             token=token,
             prefix=os.getenv("PREFIX", "!"),
@@ -69,5 +74,6 @@ class Config:
             supabase_key=supabase_key,
             mod_role_id=mod_role_id,
             gemini_api_key=gemini_api_key,
+            web_password=web_password,
         )
 

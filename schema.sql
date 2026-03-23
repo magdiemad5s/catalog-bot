@@ -92,3 +92,21 @@ create table if not exists xp_settings (
     cooldown_seconds  int     not null default 60,
     levelup_channel   bigint          -- NULL = reply in current channel
 );
+
+-- AI Leaderboard
+create table if not exists ai_interactions (
+    guild_id   bigint not null,
+    user_id    bigint not null,
+    interaction_count int not null default 0,
+    primary key (guild_id, user_id)
+);
+
+
+-- AI Auto Web Search Preference Nodes
+create table if not exists auto_web_guilds (
+    guild_id bigint primary key
+);
+
+create table if not exists auto_web_users (
+    user_id bigint primary key
+);
