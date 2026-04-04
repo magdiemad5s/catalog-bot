@@ -53,6 +53,11 @@ async def dashboard(request):
     ai_selected = "selected" if settings.get('ai_enabled', True) else ""
     ai_disabled = "" if settings.get('ai_enabled', True) else "selected"
     
+    welcome_cog = bot.get_cog("Welcome")
+    welcome_enabled = getattr(welcome_cog, "welcoming_enabled", True) if welcome_cog else False
+    welcome_sel = "selected" if welcome_enabled else ""
+    welcome_dis = "selected" if not welcome_enabled else ""
+    
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -114,9 +119,15 @@ async def dashboard(request):
             <h2>Governance Configuration</h2>
             <form action="/update" method="post">
                 <label>AI Enabled (Global Killswitch)</label>
-                <select name="ai_enabled" style="background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px;">
+                <select name="ai_enabled" style="background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 8px; width: 100%; box-sizing: border-box; margin-bottom: 15px;">
                     <option value="true" {ai_selected}>Enabled</option>
                     <option value="false" {ai_disabled}>Disabled</option>
+                </select>
+                
+                <label>Welcome & Onboarding (Global Killswitch)</label>
+                <select name="welcome_enabled" style="background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px;">
+                    <option value="true" {welcome_sel}>Enabled</option>
+                    <option value="false" {welcome_dis}>Disabled</option>
                 </select>
             
                 <label>Max Queries (per window)</label>
@@ -176,6 +187,12 @@ async def update_settings(request):
             log.info("Governance Configuration updated via Web Admin")
         except ValueError:
             log.warning("Invalid configuration numbers provided in web panel.")
+            
+    welcome_cog = bot.get_cog("Welcome")
+    if welcome_cog:
+        welcome_enabled_str = data.get("welcome_enabled", "true")
+        welcome_cog.welcoming_enabled = (str(welcome_enabled_str).lower() == "true")
+        log.info(f"Welcome Cog state set to {welcome_cog.welcoming_enabled}")
             
     # Redirect back to home
     raise web.HTTPFound('/')

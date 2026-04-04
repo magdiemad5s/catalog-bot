@@ -16,17 +16,18 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class Config:
-    # ── Core ──────────────────────────────────────────────────────────────────
     token: str
     prefix: str = "!"
     gemini_api_key: str = ""
+    gemini_api_key_2: str = ""
+    gemini_api_key_3: str = ""
+
+    # ── Web Panel ─────────────────────────────────────────────────────────────
+    web_password: str = "admin123"
 
     # ── Supabase ──────────────────────────────────────────────────────────────
     supabase_url: str = ""
     supabase_key: str = ""
-
-    # ── Web Panel ─────────────────────────────────────────────────────────────
-    web_password: str = "admin123"
 
     # ── Moderation ────────────────────────────────────────────────────────────
     # Role ID required to run any moderation command.
@@ -65,6 +66,8 @@ class Config:
         if not gemini_api_key:
             log.warning("GEMINI_API_KEY is not set — AI chat features will remain offline.")
 
+        gemini_api_key_2 = os.getenv("GEMINI_API_KEY_2", "").strip()
+        gemini_api_key_3 = os.getenv("GEMINI_API_KEY_3", "").strip()
         web_password = os.getenv("WEB_PASSWORD", "admin123").strip()
 
         return cls(
@@ -74,6 +77,8 @@ class Config:
             supabase_key=supabase_key,
             mod_role_id=mod_role_id,
             gemini_api_key=gemini_api_key,
+            gemini_api_key_2=gemini_api_key_2,
+            gemini_api_key_3=gemini_api_key_3,
             web_password=web_password,
         )
 

@@ -318,40 +318,12 @@ class XP(commands.Cog, name="XP"):
                  if role_id:
                      role = member.guild.get_role(role_id)
                      if role: roles_to_add.append(role)
+                     
              if roles_to_add:
                  try:
                      await member.add_roles(*roles_to_add)
                  except discord.Forbidden:
                      pass
-
-    @commands.group(name="streak", invoke_without_command=True)
-    async def streak(self, ctx: commands.Context):
-        """Setup or details for the streak channel."""
-        if not ctx.guild:
-            return
-            
-        # Look for a streak channel in the guild
-        streak_channel = discord.utils.find(lambda c: "streak" in c.name.lower() and isinstance(c, discord.TextChannel), ctx.guild.channels)
-        
-        if not streak_channel:
-            try:
-                # Create it in the same category if possible
-                streak_channel = await ctx.guild.create_text_channel(
-                    name="streak",
-                    category=ctx.channel.category,
-                    reason="Streak channel initialized via !streak command."
-                )
-                await streak_channel.send(
-                    f"**Welcome to the Streak Archive!** 🔥\n\n"
-                    f"Send a text message containing interesting content or an image here every 24 hours to build "
-                    f"and maintain your streak! Messages sent in this channel earn **BONUS XP**."
-                )
-                await ctx.reply(f"A new streak channel has been established: {streak_channel.mention}")
-            except discord.Forbidden:
-                await ctx.reply(embed=info_embed("Error", "I do not have the permissions to create channels. Please ask an Admin, or create a channel with 'streak' in the name manually."))
-        else:
-            await ctx.reply(f"The streak channel is already designated here: {streak_channel.mention}. "
-                            "Upload an image or send a text message there to earn bonus XP and maintain your daily streak!")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -372,15 +344,6 @@ class XP(commands.Cog, name="XP"):
             pass # Fail open
 
         amount = random.randint(settings.get("xp_min", 15), settings.get("xp_max", 25))
-        
-        # Check if they are in the streak channel, and if they typed text or uploaded an image.
-        is_streak_channel = "streak" in message.channel.name.lower()
-        has_content = len(message.content.strip()) > 0 or len(message.attachments) > 0
-        
-        if is_streak_channel and has_content:
-            # Grant a flat +25 Bonus XP for participating in the streak channel
-            amount += 25
-            
         await self._award_xp(message, message.author, amount, is_voice=False)
 
 

@@ -5,6 +5,18 @@
 -- Tables used by the bot.
 -- Add new tables here as features are built.
 
+-- ── User Profiles (Memory & Profiling) ─────────────────────────────────────────
+-- Stores AI-generated dossiers and tracking flags for users.
+create table if not exists user_profiles (
+    user_id       bigint       primary key,
+    avatar_hash   text,                            -- Used to detect PFP changes
+    profile_bio   text,                            -- Used to detect bio changes
+    dossier       text         not null default '',-- AI generated summary of who they are
+    recent_flags  text         not null default '',-- Things for the AI to bring up (e.g. "Changed PFP recently")
+    has_library_card boolean   not null default false, -- Tracks if the user has completed the onboarding interview
+    last_checked  timestamptz  not null default now()
+);
+
 -- ── Warnings ───────────────────────────────────────────────────────────────────
 -- Stores member warnings issued via the !warn command.
 create table if not exists warnings (
@@ -91,22 +103,4 @@ create table if not exists xp_settings (
     xp_max            int     not null default 25,
     cooldown_seconds  int     not null default 60,
     levelup_channel   bigint          -- NULL = reply in current channel
-);
-
--- AI Leaderboard
-create table if not exists ai_interactions (
-    guild_id   bigint not null,
-    user_id    bigint not null,
-    interaction_count int not null default 0,
-    primary key (guild_id, user_id)
-);
-
-
--- AI Auto Web Search Preference Nodes
-create table if not exists auto_web_guilds (
-    guild_id bigint primary key
-);
-
-create table if not exists auto_web_users (
-    user_id bigint primary key
 );
