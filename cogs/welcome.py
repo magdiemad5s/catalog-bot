@@ -14,6 +14,7 @@ from google import genai
 from google.genai import types
 
 from db.client import get_db
+from utils.settings_manager import load_settings
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +27,8 @@ class Welcome(commands.Cog, name="Welcome"):
         self.active_onboarding = {} # user_id -> list of types.Content (conversation history)
         
         # Controlled by Web Panel
-        self.welcoming_enabled = True
+        settings = load_settings()
+        self.welcoming_enabled = settings.get("welcome_enabled", True)
         
         self.primary_clients = []
         self.fallback_client = None
@@ -194,6 +196,8 @@ class Welcome(commands.Cog, name="Welcome"):
             "Guidelines:\n"
             "- Ask questions one at a time in a friendly, casual tone.\n"
             "- Be reactive and playful.\n"
+            "*** ABSOLUTE CRITICAL SFW DIRECTIVE ***\n"
+            "You must keep everything strictly family-friendly. No sexually explicit, offensive, or inappropriate content is allowed. If the user provides borderline NSFW/risky content, set `nsfw_suspected = true` when calling `issue_library_card`.\n"
             "*** ABSOLUTE CRITICAL SYSTEM DIRECTIVE ***\n"
             "YOU ARE A PROGRAMMATIC STATE MACHINE. YOU ARE STRICTLY FORBIDDEN FROM GENERATING A TEXT-BASED ASCII CARD IN YOUR TEXT RESPONSES.\n"
             "When the user answers the final question, says 'Make the card now', or indicates they are done, YOU MUST IMMEDIATELY STOP TEXT GENERATION AND EXECUTE THE `issue_library_card` TOOL/FUNCTION CALL INSTEAD.\n"
@@ -214,9 +218,10 @@ class Welcome(commands.Cog, name="Welcome"):
                             "interests": {"type": "STRING", "description": "Their interests, passions, or what brought them here"},
                             "hobbies": {"type": "STRING", "description": "What they do for fun / hobbies outside the screen"},
                             "fun_fact": {"type": "STRING", "description": "A fun fact or quote they provided"},
-                            "flavor_sentence": {"type": "STRING", "description": "A short, witty, AI-crafted line summarizing their vibe"}
+                            "flavor_sentence": {"type": "STRING", "description": "A short, witty, AI-crafted line summarizing their vibe"},
+                            "nsfw_suspected": {"type": "BOOLEAN", "description": "Set to true if you suspect the inputs contain NSFW, suggestive, or risky content."}
                         },
-                        "required": ["name", "pronouns", "alias", "interests", "hobbies", "fun_fact", "flavor_sentence"]
+                        "required": ["name", "pronouns", "alias", "interests", "hobbies", "fun_fact", "flavor_sentence", "nsfw_suspected"]
                     }
                 )
             ]
@@ -284,9 +289,14 @@ class Welcome(commands.Cog, name="Welcome"):
 
     async def _process_stage_three(self, user: discord.User, args: dict):
         """Stage 3: Generate the card and post it to the showcase channel."""
+        nsfw_suspected = args.get("nsfw_suspected", False)
+        
         # 1. Let the user know in DMs that it's complete
         try:
-            await user.send("Perfect! I'm minting your Library Card now... Come check it out in the server! 🎉")
+            if nsfw_suspected:
+                await user.send("Perfect! I'm minting your Library Card now... It'll go through a quick review first before being printed! 🎉")
+            else:
+                await user.send("Perfect! I'm minting your Library Card now... Come check it out in the server! 🎉")
         except discord.Forbidden:
             pass
 
@@ -303,27 +313,62 @@ class Welcome(commands.Cog, name="Welcome"):
         flavor = args.get("flavor_sentence", "An enigmatic presence newly added to our records.")
         joined_date = datetime.now(timezone.utc).strftime("%b %d, %Y")
 
-        # 3. ASCII Card string format
+        # 3. ASCII Card string format (wider columns)
         card_content = (
             "```text\n"
-            "╔══════════════════════════════════════════════════════╗\n"
-            "║                 🎴 MEMBER LIBRARY CARD               ║\n"
-            "╠══════════════════════════════════════════════════════╣\n"
-            f"║  NAME:        {name[:38].ljust(38)} ║\n"
-            f"║  ALIAS:       {alias[:38].ljust(38)} ║\n"
-            f"║  INTERESTS:   {interests[:38].ljust(38)} ║\n"
-            f"║  HOBBIES:     {hobbies[:38].ljust(38)} ║\n"
-            f"║  FUN FACT:    {fun_fact[:38].ljust(38)} ║\n"
-            f"║  JOINED:      {joined_date.ljust(38)} ║\n"
-            "║  STATUS:      ✅ Officially One of Us                ║\n"
-            "╚══════════════════════════════════════════════════════╝\n"
+            "╔══════════════════════════════════════════════════════════════════════════╗\n"
+            "║                            🎴 MEMBER LIBRARY CARD                        ║\n"
+            "╠══════════════════════════════════════════════════════════════════════════╣\n"
+            f"║  NAME:        {name[:58].ljust(58)} ║\n"
+            f"║  ALIAS:       {alias[:58].ljust(58)} ║\n"
+            f"║  INTERESTS:   {interests[:58].ljust(58)} ║\n"
+            f"║  HOBBIES:     {hobbies[:58].ljust(58)} ║\n"
+            f"║  FUN FACT:    {fun_fact[:58].ljust(58)} ║\n"
+            f"║  JOINED:      {joined_date.ljust(58)} ║\n"
+            "║  STATUS:      ✅ Officially a member                                     ║\n"
+            "╚══════════════════════════════════════════════════════════════════════════╝\n"
             "```\n"
             f"> *\"{flavor}\"*\n\n"
             f"Welcome to the archives, {user.mention}!\n"
             f"Love your card? Feel free to share it anywhere you like — you've officially been inducted. 🎉"
         )
         
-        # 4. Post to the server
+        # 4. Mod Review Queue for suspected NSFw
+        if nsfw_suspected:
+            for guild in self.bot.guilds:
+                member = guild.get_member(user.id)
+                if not member: 
+                    continue
+                # Specific channel ID provided by user
+                mod_channel = guild.get_channel(1482973008812441623)
+                # Fallback purely for safety just in case
+                if not mod_channel:
+                    mod_channel = discord.utils.get(guild.text_channels, name="mod-logs") or discord.utils.get(guild.text_channels, name="moderators")
+                
+                if mod_channel:
+                    try:
+                        mod_msg = await mod_channel.send(f"⚠️ **NSFW REVIEW REQUIRED FOR {user.mention}** ⚠️\nReact ✅ to approve and post publicly. React ❌ to reject and delete.\n{card_content}")
+                        await mod_msg.add_reaction("✅")
+                        await mod_msg.add_reaction("❌")
+                        log.info(f"Queued NSFW review for {user.name} in {mod_channel.name}.")
+                        
+                        # Lock their DM access while under review
+                        try:
+                            db = get_db()
+                            db.table("user_profiles").upsert({
+                                "user_id": user.id,
+                                "has_library_card": True
+                            }).execute()
+                        except Exception as db_e:
+                            log.error(f"Failed to lock DM state for {user.id} during review: {db_e}")
+                            
+                    except discord.Forbidden:
+                        log.warning("Could not send to mod channel.")
+            if user.id in self.active_onboarding:
+                del self.active_onboarding[user.id]
+            return
+            
+        # 4. Post to the server publicly
         for guild in self.bot.guilds:
             member = guild.get_member(user.id)
             if not member: 
@@ -404,6 +449,89 @@ class Welcome(commands.Cog, name="Welcome"):
             await self._process_stage_one(member)
         except commands.MemberNotFound:
             await ctx.send(f"Could not find the member: `{target}`.")
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        if payload.user_id == self.bot.user.id:
+            return
+            
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild: return
+        
+        channel = guild.get_channel(payload.channel_id)
+        if not channel: return
+        
+        emoji = str(payload.emoji)
+        if emoji not in ["✅", "❌"]: return
+        
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except discord.NotFound:
+            return
+            
+        if message.author.id != self.bot.user.id:
+            return
+            
+        if "⚠️ **NSFW REVIEW REQUIRED" not in message.content:
+            return
+            
+        # Get member who reacted
+        member = guild.get_member(payload.user_id)
+        if not member or not member.guild_permissions.manage_messages:
+            return # Must be a mod
+            
+        import re
+        match = re.search(r"<@!?(\d+)>", message.content)
+        if not match:
+            return
+        target_user_id = int(match.group(1))
+        
+        if emoji == "✅":
+            # Extract card content (skip the first 2 lines)
+            parts = message.content.split("\n", 2)
+            if len(parts) > 2:
+                card_content = parts[2]
+                
+                # Post to destination
+                card_channel = guild.get_channel(1482736369024503808)
+                if not card_channel:
+                    card_channel = discord.utils.get(guild.text_channels, name="library-cards")
+                if not card_channel:
+                    card_channel = discord.utils.get(guild.text_channels, name="introductions")
+                    
+                if card_channel:
+                    await card_channel.send(card_content)
+                    log.info(f"Mod approved library card posted for {target_user_id}")
+                    
+                # Update DB
+                try:
+                    db = get_db()
+                    db.table("user_profiles").upsert({
+                        "user_id": target_user_id,
+                        "has_library_card": True
+                    }).execute()
+                except Exception as e:
+                    log.error(f"Failed to update DB on mod approval for {target_user_id}: {e}")
+                    
+            await message.delete()
+        elif emoji == "❌":
+            await message.delete()
+            log.info(f"Mod rejected library card for {target_user_id}")
+            
+            # Unlock their DM access so they or an admin can restart the flow
+            try:
+                db = get_db()
+                db.table("user_profiles").update({"has_library_card": False}).eq("user_id", target_user_id).execute()
+            except Exception as e:
+                log.error(f"Failed to unlock DB on mod rejection for {target_user_id}: {e}")
+                
+            # Try to inform the user
+            target_user = self.bot.get_user(target_user_id)
+            if target_user:
+                try:
+                    await target_user.send("Your library card setup was rejected by moderation due to inappropriate content. Please refrain from explicitly violating safety guidelines. You can ping an admin to reset it.")
+                except:
+                    pass
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Welcome(bot))

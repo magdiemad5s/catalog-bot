@@ -5,6 +5,8 @@ import base64
 import time
 import logging
 
+from utils.settings_manager import load_settings, save_settings, get_presets, save_preset
+
 log = logging.getLogger("web")
 
 START_TIME = time.time()
@@ -44,157 +46,278 @@ async def dashboard(request):
     if not ai_cog:
         return web.Response(text="AI Cog not loaded.", status=500)
     
-    # Get stats from AI cog
-    settings = ai_cog.get_settings()
+    settings = load_settings()
     stats = ai_cog.get_stats()
-    
     rules_text = rules_cog.get_rules_text() if rules_cog else ""
     
-    ai_selected = "selected" if settings.get('ai_enabled', True) else ""
-    ai_disabled = "" if settings.get('ai_enabled', True) else "selected"
+    # Load settings with fallbacks
+    ai_enabled = settings.get('ai_enabled', True)
+    welcome_enabled = settings.get('welcome_enabled', True)
     
-    welcome_cog = bot.get_cog("Welcome")
-    welcome_enabled = getattr(welcome_cog, "welcoming_enabled", True) if welcome_cog else False
+    ai_selected = "selected" if ai_enabled else ""
+    ai_disabled = "" if ai_enabled else "selected"
+    
     welcome_sel = "selected" if welcome_enabled else ""
-    welcome_dis = "selected" if not welcome_enabled else ""
+    welcome_dis = "" if welcome_enabled else "selected"
+    
+    presets = get_presets()
+    preset_options = ""
+    for name, content in presets.items():
+        # Encode for HTML attribute
+        safe_content = content.replace('"', '&quot;').replace("\\", "\\\\").replace("\n", "\\n")
+        preset_options += f'<option value="{safe_content}">{name}</option>'
     
     html = f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>S.E.R.A Admin Panel</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
-            body {{ font-family: monospace; background: #0f1015; color: #ddd; padding: 20px; }}
-            input, textarea, button, select {{ font-family: monospace; background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px; border-radius: 4px; }}
-            label {{ display: block; margin-bottom: 5px; font-weight: bold; color: #a5b4fc; }}
-            .card {{ background: #1e1e24; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); border: 1px solid #333; }}
-            h1, h2 {{ color: #a5b4fc; }}
-            .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }}
-            .stat-box {{ background: #2a2a35; padding: 15px; text-align: center; border-radius: 6px; border-top: 4px solid #4f46e5; }}
-            .stat-value {{ font-size: 28px; font-weight: bold; color: #fff; margin-top: 10px; }}
-            .leaderboard-list {{ list-style-type: none; padding: 0; margin: 0; }}
-            .leaderboard-list li {{ background: #2a2a35; padding: 10px; margin-bottom: 5px; border-radius: 4px; display: flex; justify-content: space-between; }}
-            .pill {{ background: #4f46e5; padding: 2px 8px; border-radius: 12px; font-size: 14px; font-weight: bold; }}
-            button:hover {{ background: #4338ca !important; }}
+            :root {{
+                --bg: #09090b; --surface: #18181b; --surface-border: #27272a;
+                --primary: #6366f1; --primary-hover: #4f46e5;
+                --text: #f4f4f5; --text-muted: #a1a1aa;
+                --danger: #ef4444;
+            }}
+            body {{
+                font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
+                margin: 0; padding: 2rem; display: flex; justify-content: center;
+            }}
+            .container {{ max-width: 1000px; width: 100%; }}
+            .header {{
+                text-align: left; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--surface-border);
+            }}
+            h1 {{ font-size: 1.8rem; font-weight: 700; margin: 0; color: #fff; display: flex; align-items: center; gap: 10px; }}
+            h1 span {{ color: var(--primary); }}
+            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }}
+            .card {{
+                background: var(--surface); border: 1px solid var(--surface-border); border-radius: 12px;
+                padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }}
+            h2 {{ font-size: 1.25rem; font-weight: 600; color: #fff; margin-top: 0; margin-bottom: 1.5rem; border-bottom: 1px solid var(--surface-border); padding-bottom: 0.5rem; }}
+            
+            .stats-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }}
+            .stat-box {{ background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2); padding: 1rem; border-radius: 8px; }}
+            .stat-box.danger {{ background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }}
+            .stat-label {{ font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; }}
+            .stat-value {{ font-size: 1.8rem; font-weight: 700; margin-top: 0.5rem; color: #fff; }}
+            
+            label {{ display: block; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.4rem; color: #e4e4e7; }}
+            input, select, textarea {{
+                width: 100%; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--surface-border);
+                background: #09090b; color: var(--text); font-family: inherit; font-size: 0.95rem;
+                margin-bottom: 1.25rem; box-sizing: border-box; transition: border-color 0.2s;
+            }}
+            input:focus, select:focus, textarera:focus {{ outline: none; border-color: var(--primary); }}
+            
+            button {{
+                background: var(--primary); color: white; border: none; padding: 0.75rem 1.5rem;
+                border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; width: 100%;
+                font-family: inherit; font-size: 1rem;
+            }}
+            button:hover {{ background: var(--primary-hover); }}
+            
+            .preset-controls {{ display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }}
+            .preset-controls select {{ margin-bottom: 0; }}
+            .preset-controls button {{ width: auto; white-space: nowrap; background: #27272a; border: 1px solid #3f3f46; }}
+            .preset-controls button:hover {{ background: #3f3f46; }}
+            
+            .save-preset-row {{ display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 1.25rem; background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; border: 1px dashed var(--surface-border); }}
+            .save-preset-row div {{ flex-grow: 1; }}
+            .save-preset-row input {{ margin-bottom: 0; }}
+            .save-preset-row button {{ width: auto; background: var(--primary); }}
         </style>
+        <script>
+            function loadPreset(selectObj) {{
+                const val = selectObj.value;
+                if(val) {{
+                    document.getElementById('sys_prompt_area').value = val.replace(/\\\\n/g, '\\n');
+                }}
+            }}
+            async function saveNewPreset() {{
+                const name = document.getElementById('new_preset_name').value;
+                const prompt = document.getElementById('sys_prompt_area').value;
+                if(!name || !prompt) {{ alert("Please provide a name and prompt content."); return; }}
+                
+                const formData = new FormData();
+                formData.append('name', name);
+                formData.append('prompt', prompt);
+                
+                const res = await fetch('/presets/save', {{ method: 'POST', body: formData }});
+                if(res.ok) window.location.reload();
+                else alert("Failed to save preset.");
+            }}
+        </script>
     </head>
     <body>
-        <h1>S.E.R.A. System Administration Console</h1>
-        
-        <div class="card">
-            <h2>Live System Telemetry</h2>
-            <div class="stats">
-                <div class="stat-box">
-                    <div>Connected Servers</div>
-                    <div class="stat-value">{len(bot.guilds)}</div>
+        <div class="container">
+            <div class="header">
+                <h1><span>S.E.R.A.</span> Control Hub</h1>
+                <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.5rem;">Global Administration & Intelligence Tuning</div>
+            </div>
+            
+            <div class="grid">
+                <div class="card">
+                    <h2>Live Telemetry</h2>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Servers</div>
+                            <div class="stat-value">{len(bot.guilds)}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Latency</div>
+                            <div class="stat-value">{round(bot.latency * 1000)}ms</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Uptime</div>
+                            <div class="stat-value">{round((time.time() - START_TIME) / 3600, 1)}h</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Queries</div>
+                            <div class="stat-value">{stats['total_requests']}</div>
+                        </div>
+                        <div class="stat-box danger">
+                            <div class="stat-label">Rate Limits</div>
+                            <div class="stat-value">{stats['total_rate_limits']}</div>
+                        </div>
+                        <div class="stat-box danger">
+                            <div class="stat-label">Throttled Users</div>
+                            <div class="stat-value">{stats['active_throttled']}</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <div>Gateway Latency</div>
-                    <div class="stat-value">{round(bot.latency * 1000)}ms</div>
-                </div>
-                <div class="stat-box">
-                    <div>Process Uptime</div>
-                    <div class="stat-value">{round((time.time() - START_TIME) / 3600, 1)}h</div>
+                
+                <div class="card">
+                    <h2>Character & Prompt Presets</h2>
+                    <div class="preset-controls">
+                        <select onchange="loadPreset(this)">
+                            <option value="">-- Select a predefined personality --</option>
+                            <option value="You are Catalog, a funny, slightly unhinged Discord librarian who occasionally ragebaits and stirs the pot, but ultimately remains a helpful assistant. Keep your responses concise for Discord chat. Add humor and light sarcasm.">Default (Catalog)</option>
+                            {preset_options}
+                        </select>
+                    </div>
+                    
+                    <div class="save-preset-row">
+                        <div>
+                            <label>Save current prompt as Preset</label>
+                            <input type="text" id="new_preset_name" placeholder="E.g. Angry Librarian">
+                        </div>
+                        <button type="button" onclick="saveNewPreset()">Save Preset</button>
+                    </div>
                 </div>
             </div>
             
-            <h2 style="margin-top: 30px;">AI Resource Exhaustion</h2>
-            <div class="stats">
-                <div class="stat-box" style="border-top-color: #ef4444;">
-                    <div>Total Queries Served</div>
-                    <div class="stat-value">{stats['total_requests']}</div>
+            <form action="/update" method="post" style="margin-top: 1.5rem;">
+                <div class="card">
+                    <h2>System Configuration</h2>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div>
+                            <label>Global AI Engine</label>
+                            <select name="ai_enabled">
+                                <option value="true" {ai_selected}>Online (Enabled)</option>
+                                <option value="false" {ai_disabled}>Suspended (Disabled)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Welcome Sequence module</label>
+                            <select name="welcome_enabled">
+                                <option value="true" {welcome_sel}>Active</option>
+                                <option value="false" {welcome_dis}>Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <label style="margin-top: 1rem;">System Prompt Array (AI Character Directives)</label>
+                    <textarea id="sys_prompt_area" name="system_prompt" rows="10">{settings.get('system_prompt', "You are Catalog...")}</textarea>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
+                        <div>
+                            <label>Rate Lmt Count</label>
+                            <input type="number" name="rate_limit_count" value="{settings.get('rate_limit_count', 5)}">
+                        </div>
+                        <div>
+                            <label>Rate Lmt Window (s)</label>
+                            <input type="number" name="rate_limit_window" value="{settings.get('rate_limit_window', 60)}">
+                        </div>
+                        <div>
+                            <label>Reaction Chance %</label>
+                            <input type="number" name="reaction_chance" value="{settings.get('reaction_chance', 100)}" min="0" max="100">
+                        </div>
+                        <div>
+                            <label>Intercept Chance %</label>
+                            <input type="number" name="interception_chance" value="{settings.get('interception_chance', 5)}" min="0" max="100">
+                        </div>
+                    </div>
+                    
+                    <label>Interception Keywords (Format: keyword:chance. e.g. anime:5, lore:10)</label>
+                    <input type="text" name="interception_keywords" value="{settings.get('interception_keywords', 'anime:5, library:10')}">
+                    
+                    <button type="submit" style="margin-top: 0.5rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);">Synchronize Directives & Save</button>
                 </div>
-                <div class="stat-box" style="border-top-color: #ef4444;">
-                    <div>Rate Limit Triggers</div>
-                    <div class="stat-value">{stats['total_rate_limits']}</div>
-                </div>
-                <div class="stat-box" style="border-top-color: #ef4444;">
-                    <div>Active Throttled Users</div>
-                    <div class="stat-value">{stats['active_throttled']}</div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h2>Governance Configuration</h2>
-            <form action="/update" method="post">
-                <label>AI Enabled (Global Killswitch)</label>
-                <select name="ai_enabled" style="background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 8px; width: 100%; box-sizing: border-box; margin-bottom: 15px;">
-                    <option value="true" {ai_selected}>Enabled</option>
-                    <option value="false" {ai_disabled}>Disabled</option>
-                </select>
-                
-                <label>Welcome & Onboarding (Global Killswitch)</label>
-                <select name="welcome_enabled" style="background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px;">
-                    <option value="true" {welcome_sel}>Enabled</option>
-                    <option value="false" {welcome_dis}>Disabled</option>
-                </select>
+            </form>
             
-                <label>Max Queries (per window)</label>
-                <input type="number" name="rate_limit_count" value="{settings['rate_limit_count']}">
-                
-                <label>Window Duration (seconds)</label>
-                <input type="number" name="rate_limit_window" value="{settings['rate_limit_window']}">
-                
-                <label>System Prompt (Catalog Directives)</label>
-                <textarea name="system_prompt" rows="18">{settings['system_prompt']}</textarea>
-                
-                <label>Reaction Response Chance (%)</label>
-                <input type="number" name="reaction_chance" value="{settings.get('reaction_chance', 100)}" min="0" max="100">
-                
-                <label>Default Random Interception Chance (%)</label>
-                <input type="number" name="interception_chance" value="{settings.get('interception_chance', 5)}" min="0" max="100">
-
-                <label>Interception Setup (Format: keyword:chance. e.g. anime:5, lore:10, quiet:-50)</label>
-                <input type="text" name="interception_keywords" value="{settings.get('interception_keywords', 'anime:5, library:10, web novel:15, lore:5')}">
-                
-                <button type="submit" style="background: #4f46e5; color: white; cursor: pointer; font-size: 16px; padding: 12px; margin-top: 15px; font-weight: bold;">Commit Instructions</button>
-            </form>
-        </div>
-        
-        <div class="card">
-            <h2>Room Rules / Governance</h2>
-            <form action="/update_rules" method="post">
-                <label>Rules Document (Posts live to S.E.R.A.'s discord channel)</label>
-                <textarea name="rules_text" rows="18">{rules_text}</textarea>
-                
-                <button type="submit" style="background: #4f46e5; color: white; cursor: pointer; font-size: 16px; padding: 12px; margin-top: 15px; font-weight: bold;">Publish Rules</button>
-            </form>
+            <div class="card" style="margin-top: 1.5rem;">
+                <h2>Server Rules Governance</h2>
+                <form action="/update_rules" method="post">
+                    <label>Rules Document (Live on Discord)</label>
+                    <textarea name="rules_text" rows="5">{rules_text}</textarea>
+                    <button type="submit" style="background: #27272a;">Publish Rules Update</button>
+                </form>
+            </div>
+            
         </div>
     </body>
     </html>
     """
     return web.Response(text=html, content_type="text/html")
 
+@routes.post("/presets/save")
+async def save_preset_endpoint(request):
+    data = await request.post()
+    name = data.get("name")
+    prompt = data.get("prompt")
+    if name and prompt:
+        save_preset(name, prompt)
+        return web.Response(status=200, text="OK")
+    return web.Response(status=400, text="Bad Request")
+
 @routes.post("/update")
-async def update_settings(request):
+async def update_settings_endpoint(request):
     data = await request.post()
     bot = request.app['bot']
-    ai_cog = bot.get_cog("AI")
     
+    # Save to JSON
+    settings = load_settings()
+    settings['rate_limit_count'] = int(data.get("rate_limit_count", 5))
+    settings['rate_limit_window'] = int(data.get("rate_limit_window", 60))
+    settings['system_prompt'] = data.get("system_prompt", "")
+    settings['ai_enabled'] = str(data.get("ai_enabled", "true")).lower() == "true"
+    settings['welcome_enabled'] = str(data.get("welcome_enabled", "true")).lower() == "true"
+    settings['reaction_chance'] = int(data.get("reaction_chance", 100))
+    settings['interception_chance'] = int(data.get("interception_chance", 5))
+    settings['interception_keywords'] = data.get("interception_keywords", "")
+    
+    save_settings(settings)
+    log.info("Settings written to data/settings.json")
+    
+    # Push live to loaded cogs
+    ai_cog = bot.get_cog("AI")
     if ai_cog:
-        try:
-            count = int(data.get("rate_limit_count", 5))
-            window = int(data.get("rate_limit_window", 60))
-            prompt = data.get("system_prompt", "")
-            ai_enabled_str = data.get("ai_enabled", "true")
-            ai_enabled = str(ai_enabled_str).lower() == "true"
-            reaction_chance = int(data.get("reaction_chance", 100))
-            interception_chance = int(data.get("interception_chance", 5))
-            interception_keywords = data.get("interception_keywords", "")
-            
-            ai_cog.update_settings(count, window, prompt, ai_enabled, reaction_chance, interception_chance, interception_keywords)
-            log.info("Governance Configuration updated via Web Admin")
-        except ValueError:
-            log.warning("Invalid configuration numbers provided in web panel.")
+        ai_cog.update_settings(
+            settings['rate_limit_count'], settings['rate_limit_window'], 
+            settings['system_prompt'], settings['ai_enabled'], 
+            settings['reaction_chance'], settings['interception_chance'], 
+            settings['interception_keywords']
+        )
             
     welcome_cog = bot.get_cog("Welcome")
     if welcome_cog:
-        welcome_enabled_str = data.get("welcome_enabled", "true")
-        welcome_cog.welcoming_enabled = (str(welcome_enabled_str).lower() == "true")
-        log.info(f"Welcome Cog state set to {welcome_cog.welcoming_enabled}")
+        welcome_cog.welcoming_enabled = settings['welcome_enabled']
             
-    # Redirect back to home
     raise web.HTTPFound('/')
 
 @routes.post("/update_rules")
@@ -205,7 +328,6 @@ async def update_rules_endpoint(request):
     
     if rules_cog:
         rules_text = data.get("rules_text", "")
-        # Run safely in background
         bot.loop.create_task(rules_cog.update_rules_text(rules_text))
         log.info("Governance Rules updated via Web Admin")
         

@@ -17,6 +17,7 @@ from google import genai
 from google.genai import types
 
 from db.client import get_db
+from utils.settings_manager import load_settings
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,16 @@ class AI(commands.Cog, name="AI"):
             if key2: self.primary_clients.append(genai.Client(api_key=key2))
             if key3: self.fallback_client = genai.Client(api_key=key3)
             
-            self.system_instruction = "You are Catalog, a funny, slightly unhinged Discord librarian who occasionally ragebaits and stirs the pot, but ultimately remains a helpful assistant. Keep your responses concise for Discord chat. Add humor and light sarcasm."
+            # Load persistent settings
+            settings = load_settings()
+            
+            self.system_instruction = settings.get('system_prompt', "You are Catalog, a funny, slightly unhinged Discord librarian who occasionally ragebaits and stirs the pot, but ultimately remains a helpful assistant. Keep your responses concise for Discord chat. Add humor and light sarcasm.")
+            self.ai_enabled = settings.get('ai_enabled', True)
+            self.rate_limit_count = settings.get('rate_limit_count', 5)
+            self.rate_limit_window = settings.get('rate_limit_window', 60)
+            self.reaction_chance = settings.get('reaction_chance', 100)
+            self.interception_chance = settings.get('interception_chance', 5)
+            self.interception_keywords = settings.get('interception_keywords', 'anime:5, library:10')
             
             if self.primary_clients or self.fallback_client:
                 log.info(f"Gemini AI clients initialized. Primary pool: {len(self.primary_clients)}, Emergency fallback: {1 if self.fallback_client else 0}")
@@ -105,6 +115,17 @@ class AI(commands.Cog, name="AI"):
         # If in a server, require a mention. If in a DM, respond to everything.
         if message.guild and not self.bot.user.mentioned_in(message):
             return
+
+        # Deny DM interaction if user already has a library card
+        if isinstance(message.channel, discord.DMChannel):
+            try:
+                db = get_db()
+                res = db.table("user_profiles").select("has_library_card").eq("user_id", message.author.id).execute()
+                if res.data and res.data[0].get("has_library_card"):
+                    await message.reply("You're officially registered now! I don't chat in DMs anymore—please come ping me in the server at **☕〃the-main-hall** to talk.")
+                    return
+            except Exception as e:
+                log.warning(f"Failed to check DB for DM block: {e}")
 
         # We don't want to reply to command invocations (like `!rank @Catalog`)
         prefix = getattr(self.bot, "command_prefix", "!")
