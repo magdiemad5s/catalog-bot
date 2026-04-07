@@ -40,3 +40,16 @@ def save_preset(name: str, prompt: str):
         settings["presets"] = {}
     settings["presets"][name] = prompt
     save_settings(settings)
+
+def delete_preset(name: str):
+    settings = load_settings()
+    if "presets" in settings and name in settings["presets"]:
+        del settings["presets"][name]
+        save_settings(settings)
+
+def rename_preset(old_name: str, new_name: str):
+    settings = load_settings()
+    if "presets" in settings and old_name in settings["presets"]:
+        prompt = settings["presets"].pop(old_name)
+        settings["presets"][new_name] = prompt
+        save_settings(settings)

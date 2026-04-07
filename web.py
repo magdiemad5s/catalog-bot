@@ -65,7 +65,8 @@ async def dashboard(request):
     for name, content in presets.items():
         # Encode for HTML attribute
         safe_content = content.replace('"', '&quot;').replace("\\", "\\\\").replace("\n", "\\n")
-        preset_options += f'<option value="{safe_content}">{name}</option>'
+        safe_name = name.replace('"', '&quot;')
+        preset_options += f'<option value="{safe_content}" data-name="{safe_name}">{name}</option>'
     
     html = f"""
     <!DOCTYPE html>
@@ -150,6 +151,36 @@ async def dashboard(request):
                 if(res.ok) window.location.reload();
                 else alert("Failed to save preset.");
             }}
+            async function deleteCurrentPreset() {{
+                const select = document.getElementById('preset_select');
+                const opt = select.options[select.selectedIndex];
+                if (!opt || !opt.dataset.name) {{ alert("Please select a saved user preset to delete (Default cannot be deleted)."); return; }}
+                
+                if (!confirm("Permanently delete preset: " + opt.dataset.name + "?")) return;
+                
+                const formData = new FormData();
+                formData.append('name', opt.dataset.name);
+                
+                const res = await fetch('/presets/delete', {{ method: 'POST', body: formData }});
+                if(res.ok) window.location.reload();
+                else alert("Failed to delete preset.");
+            }}
+            async function renameCurrentPreset() {{
+                const select = document.getElementById('preset_select');
+                const opt = select.options[select.selectedIndex];
+                if (!opt || !opt.dataset.name) {{ alert("Please select a valid user preset to rename."); return; }}
+                
+                const newName = prompt("Enter new name for preset:", opt.dataset.name);
+                if (!newName || newName === opt.dataset.name) return;
+                
+                const formData = new FormData();
+                formData.append('old_name', opt.dataset.name);
+                formData.append('new_name', newName);
+                
+                const res = await fetch('/presets/rename', {{ method: 'POST', body: formData }});
+                if(res.ok) window.location.reload();
+                else alert("Failed to rename preset.");
+            }}
         </script>
     </head>
     <body>
@@ -193,11 +224,13 @@ async def dashboard(request):
                 <div class="card">
                     <h2>Character & Prompt Presets</h2>
                     <div class="preset-controls">
-                        <select onchange="loadPreset(this)">
+                        <select id="preset_select" onchange="loadPreset(this)" style="flex-grow: 1;">
                             <option value="">-- Select a predefined personality --</option>
                             <option value="You are Catalog, a funny, slightly unhinged Discord librarian who occasionally ragebaits and stirs the pot, but ultimately remains a helpful assistant. Keep your responses concise for Discord chat. Add humor and light sarcasm.">Default (Catalog)</option>
                             {preset_options}
                         </select>
+                        <button type="button" onclick="renameCurrentPreset()" style="width: auto; background: #6366f1;">Rename</button>
+                        <button type="button" onclick="deleteCurrentPreset()" style="width: auto; background: #ef4444;">Delete</button>
                     </div>
                     
                     <div class="save-preset-row">
@@ -216,14 +249,14 @@ async def dashboard(request):
                     
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                         <div>
-                            <label>Global AI Engine</label>
+                            <label>Global AI Engine <br><small style="color:var(--text-muted);font-weight:normal;">Instantly kills or restores standard AI message processing server-wide.</small></label>
                             <select name="ai_enabled">
                                 <option value="true" {ai_selected}>Online (Enabled)</option>
                                 <option value="false" {ai_disabled}>Suspended (Disabled)</option>
                             </select>
                         </div>
                         <div>
-                            <label>Welcome Sequence module</label>
+                            <label>Welcome Sequence module <br><small style="color:var(--text-muted);font-weight:normal;">Enables or disables the DM onboarding interview for new joins.</small></label>
                             <select name="welcome_enabled">
                                 <option value="true" {welcome_sel}>Active</option>
                                 <option value="false" {welcome_dis}>Inactive</option>
@@ -231,29 +264,29 @@ async def dashboard(request):
                         </div>
                     </div>
                     
-                    <label style="margin-top: 1rem;">System Prompt Array (AI Character Directives)</label>
+                    <label style="margin-top: 1rem;">System Prompt Array (AI Character Directives) <br><small style="color:var(--text-muted);font-weight:normal;">The core personality that governs the AI bot. Editing this modifies its core behavioral traits.</small></label>
                     <textarea id="sys_prompt_area" name="system_prompt" rows="10">{settings.get('system_prompt', "You are Catalog...")}</textarea>
                     
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
                         <div>
-                            <label>Rate Lmt Count</label>
+                            <label>Rate Lmt Count<br><small style="color:var(--text-muted);font-weight:normal;">Max requests</small></label>
                             <input type="number" name="rate_limit_count" value="{settings.get('rate_limit_count', 5)}">
                         </div>
                         <div>
-                            <label>Rate Lmt Window (s)</label>
+                            <label>Rate Lmt Window (s)<br><small style="color:var(--text-muted);font-weight:normal;">Per X seconds</small></label>
                             <input type="number" name="rate_limit_window" value="{settings.get('rate_limit_window', 60)}">
                         </div>
                         <div>
-                            <label>Reaction Chance %</label>
+                            <label>Reaction Chance %<br><small style="color:var(--text-muted);font-weight:normal;">Probability (0-100)</small></label>
                             <input type="number" name="reaction_chance" value="{settings.get('reaction_chance', 100)}" min="0" max="100">
                         </div>
                         <div>
-                            <label>Intercept Chance %</label>
+                            <label>Intercept Chance %<br><small style="color:var(--text-muted);font-weight:normal;">Random reply chance</small></label>
                             <input type="number" name="interception_chance" value="{settings.get('interception_chance', 5)}" min="0" max="100">
                         </div>
                     </div>
                     
-                    <label>Interception Keywords (Format: keyword:chance. e.g. anime:5, lore:10)</label>
+                    <label>Interception Keywords <br><small style="color:var(--text-muted);font-weight:normal;">Keywords that heavily boost the chance the AI jumps into a conversation. Format: <code>keyword:chance</code> (e.g. <code>anime:25, library:10</code>)</small></label>
                     <input type="text" name="interception_keywords" value="{settings.get('interception_keywords', 'anime:5, library:10')}">
                     
                     <button type="submit" style="margin-top: 0.5rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);">Synchronize Directives & Save</button>
@@ -282,6 +315,27 @@ async def save_preset_endpoint(request):
     prompt = data.get("prompt")
     if name and prompt:
         save_preset(name, prompt)
+        return web.Response(status=200, text="OK")
+    return web.Response(status=400, text="Bad Request")
+
+from utils.settings_manager import delete_preset, rename_preset
+
+@routes.post("/presets/delete")
+async def delete_preset_endpoint(request):
+    data = await request.post()
+    name = data.get("name")
+    if name:
+        delete_preset(name)
+        return web.Response(status=200, text="OK")
+    return web.Response(status=400, text="Bad Request")
+
+@routes.post("/presets/rename")
+async def rename_preset_endpoint(request):
+    data = await request.post()
+    old_name = data.get("old_name")
+    new_name = data.get("new_name")
+    if old_name and new_name:
+        rename_preset(old_name, new_name)
         return web.Response(status=200, text="OK")
     return web.Response(status=400, text="Bad Request")
 
