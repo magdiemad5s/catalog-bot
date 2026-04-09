@@ -4,6 +4,7 @@ from aiohttp import web
 import base64
 import time
 import logging
+import discord
 
 from utils.settings_manager import load_settings, save_settings, get_presets, save_preset
 
@@ -181,6 +182,163 @@ async def dashboard(request):
                 if(res.ok) window.location.reload();
                 else alert("Failed to rename preset.");
             }}
+
+            function togglePingInput(selectObj) {{
+                const roleDiv = document.getElementById('ping_role_div');
+                if(selectObj.value === 'role') {{
+                    roleDiv.style.display = 'block';
+                }} else {{
+                    roleDiv.style.display = 'none';
+                }}
+            }}
+            
+            // --- Live Announcement Enhancements ---
+            document.addEventListener('DOMContentLoaded', () => {{
+                const form = document.getElementById('live_announce_form');
+                if (form) {{
+                    form.addEventListener('submit', async (e) => {{
+                        e.preventDefault();
+                        const btn = document.getElementById('broadcast_btn');
+                        btn.disabled = true;
+                        btn.innerText = "Broadcasting...";
+                        const formData = new FormData(form);
+                        try {{
+                            const res = await fetch(form.action, {{ method: 'POST', body: formData }});
+                            if(res.ok) {{
+                                alert('✅ Notification was sent successfully!');
+                            }} else {{
+                                alert('❌ Failed to send announcement.');
+                            }}
+                        }} catch(err) {{
+                            alert('❌ Error sending announcement: ' + err);
+                        }} finally {{
+                            btn.disabled = false;
+                            btn.innerText = "Broadcast Announcement";
+                        }}
+                    }});
+                }}
+                
+                updateTemplateDropdown();
+                
+                const lastDraft = localStorage.getItem('live_announce_draft');
+                if(lastDraft && form && !form.dataset.loaded) {{
+                    loadFormFromJSON(JSON.parse(lastDraft));
+                    form.dataset.loaded = 'true';
+                }}
+            }});
+            
+            function saveDraft() {{
+                const form = document.getElementById('live_announce_form');
+                if(!form) return;
+                const fd = new FormData(form);
+                const obj = {{}};
+                fd.forEach((value, key) => obj[key] = value);
+                localStorage.setItem('live_announce_draft', JSON.stringify(obj));
+            }}
+            
+            function saveTemplate() {{
+                const name = prompt("Enter a name for this template (e.g. 'Cozy Stream', 'Horror Game'):");
+                if(!name) return;
+                
+                const form = document.getElementById('live_announce_form');
+                const fd = new FormData(form);
+                const obj = {{}};
+                fd.forEach((value, key) => obj[key] = value);
+                
+                let templates = JSON.parse(localStorage.getItem('live_templates') || '{{}}');
+                templates[name] = obj;
+                localStorage.setItem('live_templates', JSON.stringify(templates));
+                updateTemplateDropdown();
+                alert("Template saved!");
+            }}
+            
+            function loadSelectedTemplate(selectObj) {{
+                const name = selectObj.value;
+                if(!name) return;
+                let templates = JSON.parse(localStorage.getItem('live_templates') || '{{}}');
+                if(templates[name]) {{
+                    loadFormFromJSON(templates[name]);
+                    saveDraft();
+                }}
+                selectObj.value = ""; 
+            }}
+            
+            function loadFormFromJSON(obj) {{
+                const form = document.getElementById('live_announce_form');
+                for(const key in obj) {{
+                    const el = form.querySelector(`[name="${{key}}"]`);
+                    if(el) {{
+                        el.value = obj[key];
+                        if(el.onchange) el.onchange(); 
+                    }}
+                }}
+            }}
+            
+            function deleteSelectedTemplate() {{
+                 const selectObj = document.getElementById('template_select');
+                 const name = selectObj.options[selectObj.selectedIndex].value;
+                 if(!name) {{ alert("Please select a template to delete."); return; }}
+                 
+                 let templates = JSON.parse(localStorage.getItem('live_templates') || '{{}}');
+                 delete templates[name];
+                 localStorage.setItem('live_templates', JSON.stringify(templates));
+                 updateTemplateDropdown();
+                 alert("Template deleted.");
+            }}
+            
+            function updateTemplateDropdown() {{
+                const sel = document.getElementById('template_select');
+                if(!sel) return;
+                sel.innerHTML = '<option value="">-- Load Template --</option>';
+                let templates = JSON.parse(localStorage.getItem('live_templates') || '{{}}');
+                for(const name in templates) {{
+                    sel.innerHTML += `<option value="${{name.replace(/"/g, '&quot;')}}">${{name}}</option>`;
+                }}
+            }}
+            
+            let backupTexts = {{}};
+            async function improveText(inputName) {{
+                const el = document.querySelector(`[name="${{inputName}}"]`);
+                if(!el.value) {{ alert("Please enter some text first before improving it."); return; }}
+                
+                const originalText = el.value;
+                backupTexts[inputName] = originalText;
+                
+                el.value = "🤖 Generating improvements...";
+                el.disabled = true;
+                
+                try {{
+                    const response = await fetch('/api/improve_text', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{text: originalText}})
+                    }});
+                    const data = await response.json();
+                    
+                    if(data.improved_text) {{
+                        el.value = data.improved_text;
+                    }} else {{
+                        throw new Error(data.error || "Unknown error");
+                    }}
+                }} catch(e) {{
+                    alert("Failure: " + e);
+                    el.value = originalText;
+                }} finally {{
+                    el.disabled = false;
+                    saveDraft();
+                }}
+                
+                document.getElementById('revert_' + inputName).style.display = 'inline-block';
+            }}
+            
+            function revertText(inputName) {{
+                const el = document.querySelector(`[name="${{inputName}}"]`);
+                if(backupTexts[inputName]) {{
+                    el.value = backupTexts[inputName];
+                    document.getElementById('revert_' + inputName).style.display = 'none';
+                    saveDraft();
+                }}
+            }}
         </script>
     </head>
     <body>
@@ -302,6 +460,81 @@ async def dashboard(request):
                 </form>
             </div>
             
+            <div class="card" style="margin-top: 1.5rem; border-color: rgba(239, 68, 68, 0.4);">
+                <h2>🔴 Live Stream Announcement</h2>
+                
+                <div class="preset-controls" style="margin-bottom: 1.25rem; align-items: center;">
+                    <select id="template_select" onchange="loadSelectedTemplate(this)" style="flex-grow: 1; margin: 0;">
+                        <option value="">-- Load Template --</option>
+                    </select>
+                    <button type="button" onclick="saveTemplate()" style="width: auto; background: #6366f1;">Save As Template</button>
+                    <button type="button" onclick="deleteSelectedTemplate()" style="width: auto; background: #ef4444;">Delete</button>
+                </div>
+                <hr style="border: 0; border-top: 1px solid var(--surface-border); margin-bottom: 1.25rem;">
+                
+                <form id="live_announce_form" action="/announce_live" method="post" oninput="saveDraft()">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                        <label style="margin-bottom: 0;">Main Message Text (Outside Embed)</label>
+                        <div>
+                            <button type="button" id="revert_message_content" onclick="revertText('message_content')" style="display: none; padding: 0.2rem 0.5rem; font-size: 0.8rem; background: #52525b; width: auto; margin-right: 0.25rem;">↩️ Revert</button>
+                            <button type="button" onclick="improveText('message_content')" style="padding: 0.2rem 0.5rem; font-size: 0.8rem; background: #8b5cf6; width: auto;">✨ Improve Text with AI</button>
+                        </div>
+                    </div>
+                    <textarea name="message_content" rows="4" placeholder="e.g. 🚨 MAIN CHARACTER MELTDOWN IN PROGRESS 🚨\n\nLuzBrillante502 is LIVE..." style="margin-top: 0.4rem;"></textarea>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+                        <div>
+                            <label>Streamer Name (Author)</label>
+                            <input type="text" name="streamer_name" placeholder="e.g. Luzbrillante502 is now live on Twitch!" required style="margin-bottom: 0;">
+                        </div>
+                        <div>
+                            <label>Game Category</label>
+                            <input type="text" name="game" placeholder="e.g. Unknown" style="margin-bottom: 0;">
+                        </div>
+                    </div>
+                
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                        <label style="margin-bottom: 0;">Stream Title (Embed Title)</label>
+                        <div>
+                            <button type="button" id="revert_title" onclick="revertText('title')" style="display: none; padding: 0.2rem 0.5rem; font-size: 0.8rem; background: #52525b; width: auto; margin-right: 0.25rem;">↩️ Revert</button>
+                            <button type="button" onclick="improveText('title')" style="padding: 0.2rem 0.5rem; font-size: 0.8rem; background: #8b5cf6; width: auto;">✨ Improve Title with AI</button>
+                        </div>
+                    </div>
+                    <input type="text" name="title" placeholder="e.g. 🌙 Whatever Wednesday 🎮 | Cozy Chaos & Good Vibes 💜" required style="margin-top: 0.4rem;">
+                    
+                    <label>Stream Link (URL)</label>
+                    <input type="url" name="link" placeholder="https://twitch.tv/..." required>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div>
+                            <label>Custom Image URL (Embed Image)</label>
+                            <input type="url" name="image_url" placeholder="https://..." style="margin-bottom: 1.25rem;">
+                        </div>
+                        <div>
+                            <label>Streamer Avatar URL (Author Icon)</label>
+                            <input type="url" name="avatar_url" placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div>
+                            <label>Ping Notification</label>
+                            <select name="ping_type" onchange="togglePingInput(this)">
+                                <option value="none">No Ping</option>
+                                <option value="everyone">@everyone</option>
+                                <option value="role">Specific Role Ping</option>
+                            </select>
+                        </div>
+                        <div id="ping_role_div" style="display: none;">
+                            <label>Role ID Configuration</label>
+                            <input type="text" name="role_id" placeholder="e.g. 123456789012345678">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="broadcast_btn" style="margin-top: 1rem; background: #ef4444; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);">Broadcast Announcement</button>
+                </form>
+            </div>
+            
         </div>
     </body>
     </html>
@@ -386,6 +619,93 @@ async def update_rules_endpoint(request):
         log.info("Governance Rules updated via Web Admin")
         
     raise web.HTTPFound('/')
+
+@routes.post("/announce_live")
+async def announce_live_endpoint(request):
+    data = await request.post()
+    bot = request.app['bot']
+    
+    msg_out = data.get("message_content", "").strip()
+    streamer_name = data.get("streamer_name", "Live Stream!")
+    game_name = data.get("game", "")
+    title = data.get("title", "🚨 WE ARE LIVE! 🚨")
+    link = data.get("link", "")
+    image_url = data.get("image_url", "").strip()
+    avatar_url = data.get("avatar_url", "").strip()
+    ping_type = data.get("ping_type", "none")
+    role_id = data.get("role_id", "").strip()
+    
+    target_channel_id = 1482736373130727536
+    channel = bot.get_channel(target_channel_id)
+    
+    if channel:
+        content = ""
+        if ping_type == "everyone":
+            content += "@everyone\n"
+        elif ping_type == "role" and role_id.isdigit():
+            content += f"<@&{role_id}>\n"
+            
+        if msg_out:
+            content += f"\n{msg_out}"
+            
+        embed = discord.Embed(
+            title=title,
+            url=link,
+            color=0x6441a5 # Twitch Purple
+        )
+        
+        # User Avatar fallback to Bot Avatar
+        icon = avatar_url if avatar_url else (bot.user.avatar.url if hasattr(bot.user, 'avatar') and bot.user.avatar else None)
+        embed.set_author(name=streamer_name, icon_url=icon)
+        
+        if game_name:
+            embed.add_field(name="Game", value=game_name)
+            
+        if image_url:
+            embed.set_image(url=image_url)
+            
+        embed.set_footer(text="streamcord.io • Admin Action")
+        
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(label="Watch Stream", url=link))
+        
+        bot.loop.create_task(channel.send(content=content.strip(), embed=embed, view=view))
+        log.info(f"Live Announcement dispatched to {channel.id}")
+        return web.json_response({"success": True})
+    else:
+        log.error(f"Failed to find channel {target_channel_id} for live announcement.")
+        return web.json_response({"error": "Failed to find channel."}, status=500)
+        
+@routes.post("/api/improve_text")
+async def improve_text_endpoint(request):
+    data = await request.json()
+    text = data.get("text", "")
+    bot = request.app['bot']
+    ai_cog = bot.get_cog("AI")
+    
+    if not ai_cog:
+         return web.json_response({"error": "AI cog not loaded"}, status=500)
+    
+    client = ai_cog.get_client()
+    if not client:
+         return web.json_response({"error": "No Gemini API keys configured"}, status=500)
+         
+    prompt = f"You are an automated text improvement script. Rewrite the following stream announcement text to be extremely engaging, hype, and exciting, adding emojis where appropriate. Ensure it flows well for Discord, keeping the hype energy. IMPORTANT: Output ONLY the improved text. NO conversational filler, NO list of options, NO commentary, NO markdown formatting. Just output the final single string. Here is the original text to rewrite:\n\n{text}"
+    
+    import asyncio
+    from google.genai import types
+    config = types.GenerateContentConfig(temperature=0.8)
+    try:
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model='gemini-3.1-flash-lite-preview',
+            contents=prompt,
+            config=config
+        )
+        return web.json_response({"improved_text": response.text})
+    except Exception as e:
+        log.error(f"Error improving text via API: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 def create_app(bot):
     app = web.Application(middlewares=[auth_middleware])
