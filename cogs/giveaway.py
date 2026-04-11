@@ -14,10 +14,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 
+from db.client import get_db
 from utils import error_embed, success_embed, info_embed, warning_embed
 
 log = logging.getLogger(__name__)
@@ -32,12 +34,9 @@ REACT_POST    = "✅"
 REACT_CANCEL  = "❌"
 REACT_EDIT    = "✏️"
 
+# Pending giveaways older than this (seconds) are auto-expired
+PENDING_TTL_SECONDS = 3600  # 1 hour
 
-# ── Helper ────────────────────────────────────────────────────────────────────
-
-def _has_library_card(member: discord.Member) -> bool:
-    """Checks whether a member already has the Library Member role."""
-    return discord.utils.get(member.roles, name=LIBRARY_MEMBER_ROLE) is not None
 
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
@@ -48,8 +47,32 @@ class Giveaway(commands.Cog, name="Giveaway"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         # Tracks active giveaway confirmation messages awaiting mod reaction.
-        # Maps message_id -> {reward, winner, giveaway_channel, mod_channel}
+        # Maps message_id -> {reward, winner, giveaway_channel, mod_channel, created_at}
         self._pending_giveaways: dict[int, dict] = {}
+        self._cleanup_stale.start()
+
+    def cog_unload(self):
+        self._cleanup_stale.cancel()
+
+    @tasks.loop(minutes=5)
+    async def _cleanup_stale(self):
+        """Remove pending giveaways older than PENDING_TTL_SECONDS."""
+        now = time.time()
+        stale = [
+            mid for mid, data in self._pending_giveaways.items()
+            if now - data.get("created_at", now) > PENDING_TTL_SECONDS
+        ]
+        for mid in stale:
+            data = self._pending_giveaways.pop(mid, None)
+            if data:
+                log.info(
+                    f"Expired stale giveaway: reward='{data['reward']}' "
+                    f"(pending > {PENDING_TTL_SECONDS // 60} min)"
+                )
+
+    @_cleanup_stale.before_loop
+    async def _before_cleanup(self):
+        await self.bot.wait_until_ready()
 
     # ── !giverole ─────────────────────────────────────────────────────────────
 
@@ -88,7 +111,6 @@ class Giveaway(commands.Cog, name="Giveaway"):
         """Internal: verify card and assign role to one member."""
         # ── Verify library card completion via DB ──────────────────────────────
         try:
-            from db.client import get_db
             db = get_db()
             res = (
                 db.table("user_profiles")
@@ -96,10 +118,14 @@ class Giveaway(commands.Cog, name="Giveaway"):
                   .eq("user_id", target.id)
                   .execute()
             )
-            has_card = res.data and res.data[0].get("has_library_card", False)
+            has_card = bool(res.data) and res.data[0].get("has_library_card") is True
         except Exception as e:
-            log.warning(f"DB check failed for giverole on {target.id}: {e}")
-            has_card = True   # fallback: let admin assign manually if DB is down
+            log.error(f"DB check failed for giverole on {target.id}: {e}")
+            return await ctx.reply(
+                embed=error_embed(
+                    f"Database error while verifying library card. Please try again.\n`{e}`"
+                )
+            )
 
         if not has_card:
             return await ctx.reply(
@@ -146,7 +172,6 @@ class Giveaway(commands.Cog, name="Giveaway"):
 
         # ── Pull all card-holders from DB ──────────────────────────────────────
         try:
-            from db.client import get_db
             db = get_db()
             res = (
                 db.table("user_profiles")
@@ -154,7 +179,12 @@ class Giveaway(commands.Cog, name="Giveaway"):
                   .eq("has_library_card", True)
                   .execute()
             )
-            card_holder_ids = {int(row["user_id"]) for row in (res.data or [])}
+            card_holder_ids = set()
+            for row in (res.data or []):
+                try:
+                    card_holder_ids.add(int(row["user_id"]))
+                except (TypeError, ValueError) as conv_err:
+                    log.warning(f"[giverole auto] Skipping bad user_id {row.get('user_id')}: {conv_err}")
         except Exception as e:
             log.error(f"DB fetch failed for giverole auto: {e}")
             return await ctx.send(
@@ -172,6 +202,10 @@ class Giveaway(commands.Cog, name="Giveaway"):
         role = await self._ensure_role(ctx)
         if not role:
             return
+
+        # Ensure the member cache is fully populated (requires members intent)
+        if not ctx.guild.chunked:
+            await ctx.guild.chunk()
 
         # ── Iterate guild members and assign ──────────────────────────────────
         assigned   = 0
@@ -256,6 +290,17 @@ class Giveaway(commands.Cog, name="Giveaway"):
                 embed=error_embed(f"Role **{role_name}** not found in this server.")
             )
 
+        # ── Reject duplicate giveaways for the same role ───────────────────────
+        active_roles = {v["role"].id for v in self._pending_giveaways.values()}
+        if role.id in active_roles:
+            return await ctx.reply(
+                embed=warning_embed(
+                    "Giveaway Already Pending",
+                    f"There's already an active giveaway pending for **{role.name}**. "
+                    "Approve or cancel it before starting a new one.",
+                )
+            )
+
         # ── Filter eligible members (in role, not a bot) ───────────────────────
         candidates = [m for m in role.members if not m.bot]
         if not candidates:
@@ -294,9 +339,8 @@ class Giveaway(commands.Cog, name="Giveaway"):
             inline=False,
         )
         confirm_embed.set_footer(text=f"Giveaway initiated by {ctx.author.display_name}")
-        confirm_embed.set_thumbnail(
-            url=winner.display_avatar.url if winner.display_avatar else discord.Embed.Empty
-        )
+        if winner.display_avatar:
+            confirm_embed.set_thumbnail(url=winner.display_avatar.url)
 
         try:
             mod_msg = await mod_channel.send(embed=confirm_embed)
@@ -310,11 +354,12 @@ class Giveaway(commands.Cog, name="Giveaway"):
 
         # ── Track pending confirmation ─────────────────────────────────────────
         self._pending_giveaways[mod_msg.id] = {
-            "reward":   reward,
-            "role":     role,
-            "winner":   winner,
-            "pool":     candidates,
-            "initiator": ctx.author,
+            "reward":     reward,
+            "role":       role,
+            "winner":     winner,
+            "pool":       candidates,
+            "initiator":  ctx.author,
+            "created_at": time.time(),
         }
 
         await ctx.reply(
@@ -337,37 +382,59 @@ class Giveaway(commands.Cog, name="Giveaway"):
         if payload.user_id == self.bot.user.id:
             return
 
+        # Only process reactions in the mod channel
+        if payload.channel_id != MOD_CHANNEL_ID:
+            return
+
         # Only care about messages we're tracking
         if payload.message_id not in self._pending_giveaways:
             return
 
         guild = self.bot.get_guild(payload.guild_id)
         if not guild:
+            log.warning(f"on_raw_reaction_add: guild {payload.guild_id} not in cache.")
             return
 
         # Must be a moderator (manage_messages permission)
         mod_member = guild.get_member(payload.user_id)
-        if not mod_member or not mod_member.guild_permissions.manage_messages:
+        if not mod_member:
+            try:
+                mod_member = await guild.fetch_member(payload.user_id)
+            except discord.NotFound:
+                return
+        if not mod_member.guild_permissions.manage_messages:
             return
 
         emoji = str(payload.emoji)
         if emoji not in [REACT_POST, REACT_CANCEL, REACT_EDIT]:
             return
 
-        data = self._pending_giveaways[payload.message_id]
+        # Atomically claim this giveaway to prevent race conditions
+        # (two mods reacting simultaneously across await boundaries)
+        if emoji in [REACT_POST, REACT_CANCEL]:
+            data = self._pending_giveaways.pop(payload.message_id, None)
+            if data is None:
+                return  # another reaction already handled it
+        else:
+            # Re-roll: keep the entry (we'll update it in-place)
+            data = self._pending_giveaways.get(payload.message_id)
+            if data is None:
+                return
+
         mod_channel = guild.get_channel(MOD_CHANNEL_ID)
 
         # Fetch the original mod confirmation message so we can delete / update it
+        mod_msg = None
         try:
             if mod_channel:
                 mod_msg = await mod_channel.fetch_message(payload.message_id)
         except (discord.NotFound, AttributeError):
             mod_msg = None
 
-        reward   = data["reward"]
-        role     = data["role"]
-        winner   = data["winner"]
-        pool     = data["pool"]
+        reward    = data["reward"]
+        role      = data["role"]
+        winner    = data["winner"]
+        pool      = data["pool"]
         initiator = data["initiator"]
 
         # ── ✅ Post the winner ─────────────────────────────────────────────────
@@ -378,7 +445,6 @@ class Giveaway(commands.Cog, name="Giveaway"):
                     await mod_channel.send(
                         embed=error_embed(f"Giveaway channel (ID: `{GIVEAWAY_CHANNEL_ID}`) not found!")
                     )
-                del self._pending_giveaways[payload.message_id]
                 return
 
             announce_embed = discord.Embed(
@@ -392,9 +458,8 @@ class Giveaway(commands.Cog, name="Giveaway"):
             )
             announce_embed.add_field(name="Eligible Pool", value=f"**{len(pool)}** members from **{role.name}**", inline=True)
             announce_embed.add_field(name="Approved by",   value=mod_member.mention,  inline=True)
-            announce_embed.set_thumbnail(
-                url=winner.display_avatar.url if winner.display_avatar else discord.Embed.Empty
-            )
+            if winner.display_avatar:
+                announce_embed.set_thumbnail(url=winner.display_avatar.url)
             announce_embed.set_footer(text=f"Drawn by {initiator.display_name} • Approved by {mod_member.display_name}")
 
             try:
@@ -414,7 +479,6 @@ class Giveaway(commands.Cog, name="Giveaway"):
 
             if mod_msg:
                 await mod_msg.delete()
-            del self._pending_giveaways[payload.message_id]
 
         # ── ❌ Cancel giveaway ─────────────────────────────────────────────────
         elif emoji == REACT_CANCEL:
@@ -429,18 +493,39 @@ class Giveaway(commands.Cog, name="Giveaway"):
                     await mod_msg.clear_reactions()
                 except discord.Forbidden:
                     pass
-            del self._pending_giveaways[payload.message_id]
             log.info(f"Giveaway '{reward}' cancelled by {mod_member.name}.")
 
         # ── ✏️ Re-roll a new winner ────────────────────────────────────────────
         elif emoji == REACT_EDIT:
-            # Pick a new winner (try to avoid picking the same person if pool is large enough)
-            new_pool = [m for m in pool if m.id != winner.id] if len(pool) > 1 else pool
+            # Build cumulative exclusion set so previous winners can't be re-selected
+            excluded = data.setdefault("excluded", set())
+            excluded.add(winner.id)
+            new_pool = [m for m in pool if m.id not in excluded]
+            pool_exhausted = False
+            if not new_pool:
+                # Everyone has been excluded — reset but keep current winner out
+                excluded.clear()
+                excluded.add(winner.id)
+                new_pool = [m for m in pool if m.id not in excluded]
+                if not new_pool:
+                    new_pool = pool  # single-member pool edge case
+                    pool_exhausted = True
+
             new_winner = random.choice(new_pool)
 
-            # Update the tracked data
-            data["winner"] = new_winner
-            self._pending_giveaways[payload.message_id] = data
+            # Pre-flight: bail if a concurrent ✅/❌ already resolved this
+            if payload.message_id not in self._pending_giveaways:
+                return
+
+            # Notify mods when pool is exhausted (single-member or fully cycled)
+            if pool_exhausted and mod_channel:
+                await mod_channel.send(
+                    embed=warning_embed(
+                        "Pool Exhausted",
+                        "All eligible members have been selected at least once. "
+                        "The exclusion list has been reset — the same winner may be re-selected."
+                    )
+                )
 
             if mod_msg:
                 reroll_embed = discord.Embed(
@@ -461,16 +546,23 @@ class Giveaway(commands.Cog, name="Giveaway"):
                     inline=False,
                 )
                 reroll_embed.set_footer(text=f"Giveaway initiated by {initiator.display_name}")
-                reroll_embed.set_thumbnail(
-                    url=new_winner.display_avatar.url if new_winner.display_avatar else discord.Embed.Empty
-                )
+                if new_winner.display_avatar:
+                    reroll_embed.set_thumbnail(url=new_winner.display_avatar.url)
                 await mod_msg.edit(embed=reroll_embed)
 
-            # Remove the mod's own ✏️ reaction so they can re-roll again cleanly
-            try:
-                await mod_msg.remove_reaction(REACT_EDIT, mod_member)
-            except (discord.Forbidden, AttributeError):
-                pass
+                # Clear all reactions and re-add bot reactions to prevent stale triggers
+                try:
+                    await mod_msg.clear_reactions()
+                except discord.Forbidden:
+                    pass
+                for react in [REACT_POST, REACT_CANCEL, REACT_EDIT]:
+                    await mod_msg.add_reaction(react)
+
+            # Final guarded write-back — after all awaits complete
+            # A concurrent ✅/❌ could have popped the entry during the awaits above
+            if payload.message_id in self._pending_giveaways:
+                data["winner"] = new_winner
+                self._pending_giveaways[payload.message_id] = data
 
             log.info(
                 f"Giveaway '{reward}' re-rolled by {mod_member.name}. "
