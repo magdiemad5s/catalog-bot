@@ -63,7 +63,7 @@ class Rules(commands.Cog, name="Rules"):
             try:
                 deleted_count = 0
                 async for msg in channel.history(limit=50):
-                    if msg.author.id == self.bot.user.id and "📜" in msg.content:
+                    if msg.author.id == self.bot.user.id:
                         await msg.delete()
                         await asyncio.sleep(0.5)  # Avoid hitting rate limits
                         deleted_count += 1
@@ -75,15 +75,45 @@ class Rules(commands.Cog, name="Rules"):
                  log.error(f"Cleanup failed in {channel.name}: {e}")
 
             # 2. Split and Post new rules
-            # We use 1800 to leave plenty of room for HEADER (22 chars) and safety
-            chunks = self._chunk_text(new_text, limit=1800)
+            # We use 3800 to leave plenty of room for safely fitting in an embed description (4096 limit)
+            chunks = self._chunk_text(new_text, limit=3800)
             
             try:
                 for i, chunk in enumerate(chunks):
-                    prefix = HEADER if i == 0 else ""
-                    await channel.send(f"{prefix}{chunk}")
+                    embed = discord.Embed(
+                        description=chunk,
+                        color=discord.Color.from_rgb(101, 67, 33)
+                    )
+                    
+                    # First embed decorations
+                    if i == 0:
+                        embed.title = "📜 The Arcane Codex — Server Laws"
+                        embed.set_author(
+                            name="Catalog — The Living Archive",
+                            icon_url=self.bot.user.display_avatar.url
+                        )
+                        embed.add_field(name="⠀", value="─────────────────────────────────", inline=False)
+                    
+                    # Bottom decorative line for all embeds
+                    embed.add_field(name="⠀", value="─────────────────────────────────", inline=False)
+                    
+                    # Last embed footer and timestamp
+                    if i == len(chunks) - 1:
+                        embed.set_footer(
+                            text="✦ By entering these halls, you agree to abide by the Codex ✦",
+                            icon_url=self.bot.user.display_avatar.url
+                        )
+                        embed.timestamp = discord.utils.utcnow()
+                    
+                    # Visual spacing between multiple embed chunks
+                    if i > 0:
+                        await channel.send("⠀")
+                        await asyncio.sleep(0.3)
+
+                    await channel.send(embed=embed)
                     await asyncio.sleep(0.3)
-                log.info(f"Posted rules in {len(chunks)} chunks to {channel.name}.")
+                    
+                log.info(f"Posted rules in {len(chunks)} embed(s) to {channel.name}.")
             except discord.Forbidden:
                 log.warning(f"Missing permissions to post rules in {channel.name}.")
             except Exception as e:
