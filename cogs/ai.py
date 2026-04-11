@@ -13,8 +13,11 @@ from datetime import datetime, timezone
 
 import discord
 from discord.ext import commands
+import json
+import time
 from google import genai
 from google.genai import types
+from ddgs import DDGS
 
 from db.client import get_db
 from utils.settings_manager import load_settings
@@ -29,6 +32,14 @@ class AI(commands.Cog, name="AI"):
         self.primary_clients = []
         self.fallback_client = None
         self.current_client_idx = 0
+        
+        self.auto_web_guilds = set()
+        self.auto_web_users = set()
+        
+        # --- Web Panel & Rate Limiter State ---
+        self.stats_total_requests = 0
+        self.stats_rate_limits = 0
+        self.user_usage = {} # {user_id: [timestamps]}
         
         # Debounce dictionary for reactions: (message_id, user_id) -> list[emoji_name]
         self.pending_reactions = {}
@@ -57,6 +68,7 @@ class AI(commands.Cog, name="AI"):
             
             if self.primary_clients or self.fallback_client:
                 log.info(f"Gemini AI clients initialized. Primary pool: {len(self.primary_clients)}, Emergency fallback: {1 if self.fallback_client else 0}")
+                self._load_web_mode()
             else:
                 log.warning("AI Cog loaded, but GEMINI_API_KEY is missing. Chatbot will not respond.")
         except Exception as e:
@@ -83,8 +95,8 @@ class AI(commands.Cog, name="AI"):
         
     def get_stats(self):
         return {
-            'total_requests': getattr(self, 'total_requests', 0),
-            'total_rate_limits': getattr(self, 'total_rate_limits', 0),
+            'total_requests': getattr(self, 'stats_total_requests', 0),
+            'total_rate_limits': getattr(self, 'stats_rate_limits', 0),
             'active_throttled': getattr(self, 'active_throttled', 0)
         }
         
@@ -96,6 +108,170 @@ class AI(commands.Cog, name="AI"):
         self.reaction_chance = reaction_chance
         self.interception_chance = interception_chance
         self.interception_keywords = interception_keywords
+
+    def _is_rate_limited(self, user_id: int) -> bool:
+        now = time.time()
+        
+        if user_id in self.user_usage:
+            self.user_usage[user_id] = [t for t in self.user_usage[user_id] if now - t <= self.rate_limit_window]
+        else:
+            self.user_usage[user_id] = []
+            
+        if len(self.user_usage[user_id]) >= self.rate_limit_count:
+            self.stats_rate_limits += 1
+            return True
+            
+        self.user_usage[user_id].append(now)
+        self.stats_total_requests += 1
+        return False
+
+    def _load_web_mode(self):
+        try:
+            db = get_db()
+            res_guilds = db.table("auto_web_guilds").select("guild_id").execute()
+            if res_guilds.data:
+                self.auto_web_guilds = {g["guild_id"] for g in res_guilds.data}
+                
+            res_users = db.table("auto_web_users").select("user_id").execute()
+            if res_users.data:
+                self.auto_web_users = {u["user_id"] for u in res_users.data}
+        except RuntimeError:
+            pass # DB Not init
+        except Exception as e:
+            log.error(f"Failed to load auto_web settings from Supabase: {e}")
+
+    async def _generate_with_fallback(self, contents, config=None, is_main_chat=False):
+        """Attempts generation with 3.0-flash. If quota exhausted, rotates API keys. If all fail, falls back to 3.1-flash-lite."""
+        model_name = 'gemini-3.1-flash-lite-preview' if is_main_chat else 'gemini-3-flash-preview'
+        
+        # Consolidate all available clients into one pool for rotation
+        clients = self.primary_clients + ([self.fallback_client] if self.fallback_client else [])
+        if not clients:
+            log.error("No Gemini clients available for generation.")
+            return None
+            
+        max_attempts = len(clients)
+        
+        for attempt in range(max_attempts):
+            # Ensure index is always within bounds of the CURRENT pool
+            idx = self.current_client_idx % len(clients)
+            assigned_client = clients[idx]
+            
+            try:
+                return await asyncio.to_thread(
+                    assigned_client.models.generate_content,
+                    model=model_name,
+                    contents=contents,
+                    config=config
+                )
+            except Exception as e:
+                err_str = str(e).lower()
+                if "429" in err_str or "exhausted" in err_str or "quota" in err_str:
+                    if attempt < max_attempts - 1:
+                        # Rotate to next client in the pool
+                        self.current_client_idx = (idx + 1) % len(clients)
+                        log.warning(f"API key {idx+1} rate limited. Switching to next available key...")
+                        continue
+                    else:
+                        # If we were using 3.0-flash and all keys failed, try 3.1-flash-lite as absolute last resort
+                        if model_name == 'gemini-3-flash-preview':
+                            log.warning("All keys rate limited for 3.0-flash. Falling back to 3.1-flash-lite.")
+                            try:
+                                return await asyncio.to_thread(
+                                    assigned_client.models.generate_content,
+                                    model='gemini-3.1-flash-lite-preview',
+                                    contents=contents,
+                                    config=config
+                                )
+                            except Exception as e2:
+                                raise e2
+                        raise e
+                raise e
+
+    def _save_web_mode(self, entity_id: int, entity_type: str, enable: bool):
+        try:
+            db = get_db()
+            table = "auto_web_guilds" if entity_type == "guild" else "auto_web_users"
+            column = "guild_id" if entity_type == "guild" else "user_id"
+            
+            if enable:
+                db.table(table).upsert({column: entity_id}).execute()
+            else:
+                db.table(table).delete().eq(column, entity_id).execute()
+        except RuntimeError:
+            pass
+        except Exception as e:
+            log.error(f"Failed to save auto_web settings to Supabase: {e}")
+
+    def _log_interaction(self, guild_id: int, user_id: int):
+        try:
+            db = get_db()
+            res = db.table("ai_interactions").select("interaction_count").eq("guild_id", guild_id).eq("user_id", user_id).execute()
+            if res.data:
+                count = res.data[0]["interaction_count"] + 1
+                db.table("ai_interactions").update({"interaction_count": count}).eq("guild_id", guild_id).eq("user_id", user_id).execute()
+            else:
+                db.table("ai_interactions").insert({"guild_id": guild_id, "user_id": user_id, "interaction_count": 1}).execute()
+        except RuntimeError:
+            pass # DB not initialized
+        except Exception as e:
+            log.error(f"Failed to log AI interaction: {e}")
+
+    @discord.app_commands.command(name="enable_web", description="Turn ON automatic routing to web search.")
+    @discord.app_commands.describe(personal_only="Set to True to only apply this to yourself (Admins only)")
+    async def enable_web(self, interaction: discord.Interaction, personal_only: bool = False):
+        is_admin = interaction.permissions.administrator or interaction.permissions.manage_guild
+        
+        if is_admin and not personal_only and interaction.guild_id:
+            self.auto_web_guilds.add(interaction.guild_id)
+            self._save_web_mode(interaction.guild_id, "guild", True)
+            await interaction.response.send_message("✅ S.E.R.A. Automatic Web Search is now **ON globally** in this server.")
+        else:
+            self.auto_web_users.add(interaction.user.id)
+            self._save_web_mode(interaction.user.id, "user", True)
+            await interaction.response.send_message("✅ S.E.R.A. Automatic Web Search is now **ON** for your personal messages.")
+
+    @discord.app_commands.command(name="disable_web", description="Turn OFF automatic routing to web search.")
+    @discord.app_commands.describe(personal_only="Set to True to only apply this to yourself (Admins only)")
+    async def disable_web(self, interaction: discord.Interaction, personal_only: bool = False):
+        is_admin = interaction.permissions.administrator or interaction.permissions.manage_guild
+        
+        if is_admin and not personal_only and interaction.guild_id:
+            if interaction.guild_id in self.auto_web_guilds:
+                self.auto_web_guilds.remove(interaction.guild_id)
+            self._save_web_mode(interaction.guild_id, "guild", False)
+            await interaction.response.send_message("❌ S.E.R.A. Automatic Web Search is now **OFF globally** in this server.")
+        else:
+            if interaction.user.id in self.auto_web_users:
+                self.auto_web_users.remove(interaction.user.id)
+            self._save_web_mode(interaction.user.id, "user", False)
+            await interaction.response.send_message("❌ S.E.R.A. Automatic Web Search is now **OFF** for your personal messages.")
+
+    @commands.group(name="catalogtop", invoke_without_command=True)
+    async def catalogtop(self, ctx: commands.Context):
+        """Displays the leaderboard of users who interacted most with Catalog."""
+        if not ctx.guild:
+            return
+            
+        try:
+            db = get_db()
+            res = db.table("ai_interactions").select("*").eq("guild_id", ctx.guild.id).order("interaction_count", desc=True).limit(10).execute()
+            
+            if not res.data:
+                await ctx.reply("No one has interacted with me in this archive yet.")
+                return
+                
+            embed = discord.Embed(title="S.E.R.A. Interaction Leaderboard", color=discord.Color.blue())
+            desc = ""
+            for idx, row in enumerate(res.data, start=1):
+                user = self.bot.get_user(row["user_id"])
+                username = user.display_name if user else f"Scholar #{row['user_id']}"
+                desc += f"**{idx}.** {username} — {row['interaction_count']} points\n"
+                
+            embed.description = desc
+            await ctx.reply(embed=embed)
+        except Exception as e:
+            await ctx.reply(f"Failed to fetch archive records: {e}")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -283,64 +459,105 @@ class AI(commands.Cog, name="AI"):
                                     mime_type=attachment.content_type
                                 )
                             )
-                            
+                
                 contents.append(types.Content(role="user", parts=current_parts))
 
-                # Function calling loop (max 2 iterations to save on quota)
-                max_iterations = 2
-                reply_text = "*I encountered an error.*"
+                # --- Search Pre-pass ---
+                prompt_lower = clean_prompt.lower()
+                web_context = ""
+                auto_search = (message.guild and message.guild.id in self.auto_web_guilds) or (message.author.id in self.auto_web_users)
+                # Tightened manual trigger to avoid false positives
+                manual_search = "search on web" in prompt_lower or prompt_lower.startswith("web:") or prompt_lower.startswith("search:")
                 
-                # Retrieve the active load-balanced key
-                assigned_client = self.get_client()
-                if not assigned_client:
-                    await message.reply("*(My brain's completely disconnected! No api keys found!)*")
-                    return
+                if auto_search or manual_search:
+                    try:
+                        # Use Gemini to determine if search is needed and get queries
+                        # Build a compact history for the query maker
+                        recent_context = ""
+                        for c in contents[-3:]: # last few turns
+                            for p in c.parts:
+                                if hasattr(p, 'text'):
+                                    recent_context += f"{c.role}: {p.text}\n"
+
+                        query_maker = (
+                            "You are a search query generator.\n"
+                            f"LATEST MESSAGE: '{clean_prompt}'\n"
+                            f"Recent Context: {recent_context}\n\n"
+                            "TASK: If the LATEST MESSAGE asks a factual question requiring live internet access, generate up to 2 DuckDuckGo queries. "
+                            "Use the Recent Context ONLY to figure out missing pronouns (like 'it', 'this book', 'latest chapter'). "
+                            "Do NOT generate queries for things related to the chat itself, user names, emojis, or casual greetings. "
+                            "IMPORTANT: Strip meta-commands like 'search the web' from the queries. Output EXACTLY a JSON array of strings, or [] if no search is needed."
+                        )
+                        
+                        query_response = await self._generate_with_fallback(contents=query_maker)
+                        
+                        if query_response and query_response.text:
+                            raw_text = query_response.text.strip()
+                            # Strip markdown fences if present
+                            if raw_text.startswith("```json"):
+                                raw_text = raw_text[7:-3].strip()
+                            elif raw_text.startswith("```"):
+                                raw_text = raw_text[3:-3].strip()
+                            
+                            try:
+                                search_queries = json.loads(raw_text)
+                                if not isinstance(search_queries, list):
+                                    search_queries = [str(search_queries)]
+                            except Exception as parse_e:
+                                log.error(f"Failed to parse JSON queries, falling back: {parse_e}")
+                                # Fallback: try to find anything that looks like a search query
+                                search_queries = [raw_text.replace('"', '').strip()[:50]]
+                                
+                            if search_queries and any(q.strip() for q in search_queries):
+                                log.info(f"Generated Web Queries: {search_queries}")
+                                
+                                def fetch_web():
+                                    all_results = []
+                                    # Limit to 3 queries max
+                                    for q in search_queries[:3]:
+                                        if not q.strip(): continue
+                                        try:
+                                            # Use max_results=3 for token efficiency
+                                            res = DDGS().text(q, max_results=3)
+                                            if res:
+                                                snippets = "\n".join([f"- {r.get('title', '')}: {r.get('body', '')}" for r in res])
+                                                all_results.append(f"🔍 [Search: '{q}']:\n{snippets}")
+                                            # Be polite to DDG (Note: This sleep is safe as it's within a background thread)
+                                            time.sleep(1) 
+                                        except Exception as inner_e:
+                                            log.warning(f"DDG query '{q}' failed: {inner_e}")
+                                    return "\n\n".join(all_results)
+                                
+                                search_results = await asyncio.to_thread(fetch_web)
+                                if search_results and search_results.strip():
+                                    web_context = f"\n\n[Live Web Search Context]\nFacts gathered automatically from DuckDuckGo:\n{search_results}\n"
+                                    # Inject context into the system prompt
+                                    dynamic_system_instruction += web_context
+                                    # Rebuild config instead of mutating it to ensure compatibility
+                                    config = types.GenerateContentConfig(
+                                        system_instruction=dynamic_system_instruction,
+                                        tools=config.tools,
+                                        automatic_function_calling=config.automatic_function_calling,
+                                        temperature=config.temperature
+                                    )
+                    except Exception as e:
+                        log.error(f"Search pre-pass failed: {e}")
+
+                # Function calling loop (max 2 iterations)
+                max_iterations = 2
+                final_reply_text = "*I encountered an error.*"
                 
                 for iteration in range(max_iterations):
-                    # Because we are using tools, we need to handle potential iterations or just let the API do it
-                    # If a rate limit hits, we will try up to 2 fallback attempts
-                    retry_attempts = 2
-                    response = None
-                    
-                    while retry_attempts > 0:
-                        try:
-                            response = await asyncio.to_thread(
-                                assigned_client.models.generate_content,
-                                model='gemini-3.1-flash-lite-preview', # Reverted to lite for highest RPD (500/day)
-                                contents=contents,
-                                config=config
-                            )
-                            break # Success! Break out of the retry loop.
-                            
-                        except Exception as e:
-                            error_str = str(e)
-                            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                                log.warning(f"Active Gemini API Key was rate limited! Swapping clients... {e}")
-                                retry_attempts -= 1
-                                
-                                if retry_attempts > 0:
-                                    await message.reply("*(Phew, brain is a bit overloaded! Let me think for a second...)*")
-                                    await asyncio.sleep(4) # Pace our request
-                                    
-                                    # Swap to emergency fallback, or round-robin to the next primary
-                                    if self.fallback_client and assigned_client != self.fallback_client:
-                                        assigned_client = self.fallback_client
-                                    else:
-                                        assigned_client = self.get_client()
-                                else:
-                                    raise e # Out of retries, throw the error
-                            else:
-                                raise e # Non-quota error, throw immediately
+                    # Use _generate_with_fallback which handles key rotation and tiered models
+                    response = await self._generate_with_fallback(contents=contents, config=config, is_main_chat=True)
                     
                     if not response:
-                        raise Exception("Failed to generate content after max retries.")
+                        raise Exception("Failed to generate content after manual retry.")
                     
                     if hasattr(response, "function_calls") and response.function_calls:
-                        # Model wants to call a function
-                        # Append the model's call to the history so it remembers requesting it
+                        # Append the model's call to the history
                         call_parts = []
                         for call in response.function_calls:
-                            # Note: The exact structure of function_call in SDK depends, but typically exposes name and args
                             call_parts.append(types.Part.from_function_call(name=call.name, args=call.args))
                         
                         contents.append(types.Content(role="model", parts=call_parts))
@@ -363,7 +580,6 @@ class AI(commands.Cog, name="AI"):
                                 
                             elif call.name == "search_discord_history":
                                 query = call.args.get("query", "").lower()
-                                # Extremely rudimentary local search on deeper history
                                 deep_history = [m async for m in message.channel.history(limit=100, before=message)]
                                 found_messages = []
                                 for m in deep_history:
@@ -371,7 +587,7 @@ class AI(commands.Cog, name="AI"):
                                         found_messages.append(f"{m.author.display_name}: {m.content}")
                                 
                                 if found_messages:
-                                    res_str = "Found in logs:\n" + "\n".join(found_messages[:5]) # limit to top 5
+                                    res_str = "Found in logs:\n" + "\n".join(found_messages[:5])
                                 else:
                                     res_str = "No matches found in the recent channel history."
                                 
@@ -382,25 +598,30 @@ class AI(commands.Cog, name="AI"):
                             response_parts.append(types.Part.from_function_response(name=call.name, response=result_data))
                         
                         contents.append(types.Content(role="user", parts=response_parts))
-                        # Loop continues to generate the NEXT response with the data!
                         continue
 
                     # If it didn't call a function, it just gave us text
-                    reply_text = response.text
+                    final_reply_text = response.text
                     break
                 
-                # Discord has a 2000 character limit per message.
-                if reply_text and len(reply_text) > 2000:
-                    reply_text = reply_text[:1996] + "..."
+                # Discord has a 2000 character limit
+                if final_reply_text and len(final_reply_text) > 2000:
+                    final_reply_text = final_reply_text[:1996] + "..."
 
-                # Clear recent_flags from DB once they have been read by the AI
+                # Clear recent_flags from DB
                 if row.data and row.data[0].get("recent_flags", "").strip():
                     db.table("user_profiles").update({"recent_flags": ""}).eq("user_id", message.author.id).execute()
-                await message.reply(reply_text)
+                
+                await message.reply(final_reply_text)
+                
+                # Log interaction for leaderboard
+                if message.guild:
+                    self._log_interaction(message.guild.id, message.author.id)
                 
         except Exception as e:
             log.error(f"Error generating Gemini response: {e}")
             await message.reply("*(I seem to be having trouble accessing my library archives right now. Please try again later!)*")
+
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         # TEMPORARILY DISABLED: Gemini 3.1 Flash free tier has a strict 15 RPM limit.
