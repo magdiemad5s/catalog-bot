@@ -7,7 +7,7 @@ from __future__ import annotations
 import discord
 from discord.ext import commands
 
-from utils import info_embed
+from utils import info_embed, error_embed
 
 
 class General(commands.Cog, name="General"):

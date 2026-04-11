@@ -59,14 +59,10 @@ class Levels(commands.Cog, name="Levels"):
             res = db.table("xp_profiles").select("*").eq("guild_id", ctx.guild.id).eq("user_id", target.id).execute()
             profile = res.data[0] if res.data else {"xp": 0, "level": 0, "streak_days": 0}
             
-            # Fetch leaderboard position
-            lb_res = db.table("xp_profiles").select("user_id").eq("guild_id", ctx.guild.id).order("xp", desc=True).execute()
-            rank_pos = 0
-            if lb_res.data:
-                for idx, row in enumerate(lb_res.data, 1):
-                    if row["user_id"] == target.id:
-                        rank_pos = idx
-                        break
+            # Fetch leaderboard position efficiently: count users with more XP
+            xp = profile["xp"]
+            above_res = db.table("xp_profiles").select("user_id", count="exact").eq("guild_id", ctx.guild.id).gt("xp", xp).execute()
+            rank_pos = (above_res.count or 0) + 1 if res.data else 0
 
             # Fetch badges
             badges_res = db.table("user_badges").select("badge_key").eq("guild_id", ctx.guild.id).eq("user_id", target.id).execute()
@@ -200,9 +196,7 @@ class Levels(commands.Cog, name="Levels"):
             if new_level != old_level:
                 xp_cog = self.bot.get_cog("XP")
                 if xp_cog:
-                    # simulate an old profile so the role remover works
-                    pseudo_profile = {"level": old_level}
-                    await xp_cog._handle_level_up(member, new_level, pseudo_profile, ctx.message)
+                    await xp_cog._handle_level_up(member, new_level, old_level, ctx.message)
                     
                     # fetch actual full profile for badges
                     new_res = db.table("xp_profiles").select("*").eq("guild_id", ctx.guild.id).eq("user_id", member.id).execute()

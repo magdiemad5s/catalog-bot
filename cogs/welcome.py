@@ -46,8 +46,12 @@ class Welcome(commands.Cog, name="Welcome"):
         except Exception as e:
             log.error(f"Failed to load keys in Welcome Cog: {e}")
 
-        # Start the queue worker
-        self.worker_task = self.bot.loop.create_task(self.join_worker())
+        # Start the queue worker when the cog is fully loaded
+        self.worker_task = None
+
+    async def cog_load(self):
+        """Start background worker after cog is fully loaded (avoids deprecated bot.loop in __init__)."""
+        self.worker_task = asyncio.create_task(self.join_worker())
 
     def get_client(self):
         """Round-robins the primary keys, or yields the fallback."""

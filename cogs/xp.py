@@ -98,26 +98,35 @@ class XP(commands.Cog, name="XP"):
         # Determine streak bonus
         streak_days = 0
         bonus_multiplier = 1.0
+        today_str = now.strftime("%Y-%m-%d")
         
         if res.data:
             profile = res.data[0]
-            last_xp_dt = None
-            if profile.get("last_xp_at"):
-                last_xp_dt = datetime.fromisoformat(profile["last_xp_at"].replace("Z", "+00:00"))
             
             streak_days = profile.get("streak_days", 0)
             
-            if last_xp_dt:
-                delta = now - last_xp_dt
-                if delta.days == 1:
-                    # Active yesterday - continue streak
-                    streak_days += 1
-                elif delta.days > 1:
-                    # Missed a day - break streak
-                    streak_days = 0
+            # Use last_streak_date (date-only string) to track daily streaks,
+            # separate from last_xp_at which updates every voice XP tick.
+            last_streak_date = profile.get("last_streak_date", "")
             
-            # Apply streak bonus (20% if streak > 0)
-            if streak_days > 0:
+            if last_streak_date and last_streak_date != today_str:
+                try:
+                    last_dt = datetime.strptime(last_streak_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    delta_days = (now.replace(hour=0, minute=0, second=0, microsecond=0) - last_dt).days
+                    if delta_days == 1:
+                        # Active yesterday — continue streak
+                        streak_days += 1
+                    elif delta_days > 1:
+                        # Missed a day — break streak
+                        streak_days = 1
+                except (ValueError, TypeError):
+                    streak_days = 1
+            elif not last_streak_date:
+                streak_days = 1
+            # else: same day, streak_days unchanged
+            
+            # Apply streak bonus (20% if streak > 1)
+            if streak_days > 1:
                 bonus_multiplier = 1.2
         
         final_xp_amount = int(amount * bonus_multiplier)
@@ -132,7 +141,8 @@ class XP(commands.Cog, name="XP"):
             "user_id": user_id,
             "last_xp_at": now.isoformat(),
             "last_seen_at": now.isoformat(),
-            "streak_days": streak_days
+            "streak_days": streak_days,
+            "last_streak_date": today_str
         }
 
         # Need to read old values to increment them safely avoiding race condition
@@ -168,12 +178,12 @@ class XP(commands.Cog, name="XP"):
 
         # 3. Check level up
         if new_level > old_level:
-            await self._handle_level_up(member, new_level, update_data, message)
+            await self._handle_level_up(member, new_level, old_level, message)
             
         # 4. Check badges
         await self._check_badges(member, update_data)
 
-    async def _handle_level_up(self, member: discord.Member, new_level: int, profile_data: dict, message: discord.Message | None):
+    async def _handle_level_up(self, member: discord.Member, new_level: int, old_level: int, message: discord.Message | None):
         guild = member.guild
         db = get_db()
         
@@ -181,8 +191,7 @@ class XP(commands.Cog, name="XP"):
         res = db.table("rank_tiers").select("*").eq("guild_id", guild.id).lte("level_min", new_level).gte("level_max", new_level).execute()
         new_rank = res.data[0] if res.data else None
         
-        # Fetch old rank tier (if old_level > 0, to remove old role)
-        old_level = profile_data.get("level", 0) - 1
+        # Fetch old rank tier to remove old role
         old_rank = None
         if old_level >= 0:
             old_res = db.table("rank_tiers").select("*").eq("guild_id", guild.id).lte("level_min", old_level).gte("level_max", old_level).execute()

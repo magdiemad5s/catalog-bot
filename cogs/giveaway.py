@@ -447,6 +447,24 @@ class Giveaway(commands.Cog, name="Giveaway"):
                     )
                 return
 
+            # Re-validate winner is still in the guild (they may have left)
+            fresh_winner = guild.get_member(winner.id)
+            if not fresh_winner:
+                try:
+                    fresh_winner = await guild.fetch_member(winner.id)
+                except discord.NotFound:
+                    if mod_channel:
+                        await mod_channel.send(
+                            embed=error_embed(
+                                f"Winner {winner.mention} is no longer in the server. "
+                                f"Use {REACT_EDIT} to re-roll a new winner."
+                            )
+                        )
+                    # Put data back so mods can re-roll
+                    self._pending_giveaways[payload.message_id] = data
+                    return
+            winner = fresh_winner
+
             announce_embed = discord.Embed(
                 title="🎉 Giveaway Winner Announced!",
                 description=(
@@ -497,6 +515,14 @@ class Giveaway(commands.Cog, name="Giveaway"):
 
         # ── ✏️ Re-roll a new winner ────────────────────────────────────────────
         elif emoji == REACT_EDIT:
+            # Refresh pool from live role membership to avoid stale Member refs
+            live_role = guild.get_role(role.id)
+            if live_role:
+                pool = [m for m in live_role.members if not m.bot]
+                data["pool"] = pool
+            else:
+                pool = data["pool"]
+
             # Build cumulative exclusion set so previous winners can't be re-selected
             excluded = data.setdefault("excluded", set())
             excluded.add(winner.id)

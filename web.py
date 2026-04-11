@@ -1,4 +1,5 @@
 import os
+import html as html_mod
 import aiohttp
 from aiohttp import web
 import base64
@@ -423,7 +424,7 @@ async def dashboard(request):
                     </div>
                     
                     <label style="margin-top: 1rem;">System Prompt Array (AI Character Directives) <br><small style="color:var(--text-muted);font-weight:normal;">The core personality that governs the AI bot. Editing this modifies its core behavioral traits.</small></label>
-                    <textarea id="sys_prompt_area" name="system_prompt" rows="10">{settings.get('system_prompt', "You are Catalog...")}</textarea>
+                    <textarea id="sys_prompt_area" name="system_prompt" rows="10">{html_mod.escape(settings.get('system_prompt', 'You are Catalog...'))}</textarea>
                     
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
                         <div>
@@ -445,7 +446,7 @@ async def dashboard(request):
                     </div>
                     
                     <label>Interception Keywords <br><small style="color:var(--text-muted);font-weight:normal;">Keywords that heavily boost the chance the AI jumps into a conversation. Format: <code>keyword:chance</code> (e.g. <code>anime:25, library:10</code>)</small></label>
-                    <input type="text" name="interception_keywords" value="{settings.get('interception_keywords', 'anime:5, library:10')}">
+                    <input type="text" name="interception_keywords" value="{html_mod.escape(settings.get('interception_keywords', 'anime:5, library:10'))}">
                     
                     <button type="submit" style="margin-top: 0.5rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);">Synchronize Directives & Save</button>
                 </div>
@@ -455,7 +456,7 @@ async def dashboard(request):
                 <h2>Server Rules Governance</h2>
                 <form action="/update_rules" method="post">
                     <label>Rules Document (Live on Discord)</label>
-                    <textarea name="rules_text" rows="5">{rules_text}</textarea>
+                    <textarea name="rules_text" rows="5">{html_mod.escape(rules_text)}</textarea>
                     <button type="submit" style="background: #27272a;">Publish Rules Update</button>
                 </form>
             </div>

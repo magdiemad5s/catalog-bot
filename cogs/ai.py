@@ -103,6 +103,10 @@ class AI(commands.Cog, name="AI"):
         if message.author.bot:
             return
 
+        # Respect the AI killswitch from the web panel
+        if not self.ai_enabled:
+            return
+
         # Check if the AI client is fully initialized
         if not self.primary_clients and not self.fallback_client:
             return
@@ -431,8 +435,11 @@ class AI(commands.Cog, name="AI"):
                     system_instruction=self.system_instruction,
                 )
                 
+                assigned_client = self.get_client()
+                if not assigned_client:
+                    return
                 response = await asyncio.to_thread(
-                    self.client.models.generate_content,
+                    assigned_client.models.generate_content,
                     model='gemini-3.1-flash-lite-preview',
                     contents=clean_prompt,
                     config=config

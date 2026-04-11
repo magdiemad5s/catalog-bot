@@ -59,6 +59,7 @@ create table if not exists xp_profiles (
     messages_sent int          not null default 0,
     voice_minutes int          not null default 0,
     streak_days   int          not null default 0,
+    last_streak_date text,                           -- 'YYYY-MM-DD' for daily streak tracking (separate from last_xp_at)
     last_xp_at    timestamptz,
     last_seen_at  timestamptz  not null default now(),
     unique (guild_id, user_id)

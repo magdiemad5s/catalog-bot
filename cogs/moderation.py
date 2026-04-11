@@ -17,8 +17,8 @@ from utils import error_embed, success_embed, warning_embed
 
 log = logging.getLogger(__name__)
 
-# Role ID allowed to run moderation commands (set in .env as MOD_ROLE_ID)
-MOD_ROLE_ID = 1482710375706263664
+# Default fallback — overridden at runtime by bot.config.mod_role_id from .env
+DEFAULT_MOD_ROLE_ID = 1482710375706263664
 
 
 # ── Checks ─────────────────────────────────────────────────────────────────────
@@ -29,10 +29,12 @@ def has_mod_role():
         # Server owner always passes
         if ctx.guild and ctx.author == ctx.guild.owner:
             return True
+        # Prefer config from .env, fall back to hardcoded default
+        mod_role_id = getattr(getattr(ctx.bot, 'config', None), 'mod_role_id', 0) or DEFAULT_MOD_ROLE_ID
         role_ids = [r.id for r in getattr(ctx.author, "roles", [])]
-        if MOD_ROLE_ID not in role_ids:
+        if mod_role_id not in role_ids:
             raise commands.CheckFailure(
-                f"You need the <@&{MOD_ROLE_ID}> role to use this command."
+                f"You need the <@&{mod_role_id}> role to use this command."
             )
         return True
     return commands.check(predicate)

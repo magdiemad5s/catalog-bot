@@ -29,8 +29,6 @@ class Memory(commands.Cog, name="Memory"):
         Background loop that checks every 12 hours if users have updated PFP or bio.
         If changes exist, updates 'recent_flags' in the DB so AI can comment on it.
         """
-        # Wait until the bot is fully ready before doing DB or API calls
-        await self.bot.wait_until_ready()
         await self._run_profile_sweep()
 
     async def _run_profile_sweep(self, guild: discord.Guild | None = None):
