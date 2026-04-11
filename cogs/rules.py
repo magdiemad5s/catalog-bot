@@ -16,7 +16,7 @@ from utils.settings_manager import load_settings, save_settings
 log = logging.getLogger(__name__)
 
 # Channel where rules are posted — update this to your server's rules channel ID
-RULES_CHANNEL_ID = 1482736369024503808  # Reuses the library-cards channel as fallback
+RULES_CHANNEL_ID = 1482736366990262283  # Reuses the library-cards channel as fallback
 
 
 class Rules(commands.Cog, name="Rules"):
