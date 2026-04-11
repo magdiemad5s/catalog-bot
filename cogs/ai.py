@@ -208,12 +208,31 @@ class AI(commands.Cog, name="AI"):
                 
                 # Gather short term memory context (last 5 messages)
                 contents = []
-                history = [m async for m in message.channel.history(limit=5, before=message)]
+                
+                # Identify if this is a reply to another message
+                referenced_msg = None
+                if message.reference:
+                    # Check cache first
+                    if isinstance(message.reference.resolved, discord.Message):
+                        referenced_msg = message.reference.resolved
+                    else:
+                        # Fetch from API if not cached
+                        try:
+                            referenced_msg = await message.channel.fetch_message(message.reference.message_id)
+                        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                            referenced_msg = None
+
+                history_limit = 5
+                history = [m async for m in message.channel.history(limit=history_limit, before=message)]
                 history.reverse() # Oldest to newest
                 
                 for past_msg in history:
                     # Don't include bot command invocations in history to reduce noise
                     if past_msg.content.startswith(prefix):
+                        continue
+                    
+                    # Avoid double-including the referenced message if it's already in the recent history
+                    if referenced_msg and past_msg.id == referenced_msg.id:
                         continue
                         
                     role = "model" if past_msg.author.id == self.bot.user.id else "user"
@@ -229,6 +248,26 @@ class AI(commands.Cog, name="AI"):
                     if text_content:
                         contents.append(types.Content(role=role, parts=[types.Part.from_text(text=text_content)]))
                 
+                # If there IS a referenced message, inject it now as a specialized context "user" turn
+                if referenced_msg:
+                    ref_parts = []
+                    ref_text = f"[Replying to {referenced_msg.author.display_name}: \"{referenced_msg.content or '(no text)'}\"]"
+                    ref_parts.append(types.Part.from_text(text=ref_text))
+                    
+                    # Include images from the referenced message
+                    if referenced_msg.attachments:
+                        for attachment in referenced_msg.attachments:
+                            if attachment.content_type and attachment.content_type.startswith("image/"):
+                                try:
+                                    img_data = await attachment.read()
+                                    ref_parts.append(
+                                        types.Part.from_bytes(data=img_data, mime_type=attachment.content_type)
+                                    )
+                                except Exception as e:
+                                    log.warning(f"Failed to read attachment from referenced message: {e}")
+                    
+                    contents.append(types.Content(role="user", parts=ref_parts))
+
                 # Finally, append the CURRENT message
                 current_parts = [types.Part.from_text(text=clean_prompt)]
                 
