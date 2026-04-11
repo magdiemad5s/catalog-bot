@@ -34,11 +34,13 @@ class Rules(commands.Cog, name="Rules"):
     async def update_rules_text(self, new_text: str):
         """Update rules in memory + settings file, then post to the rules channel."""
         self._rules_text = new_text
+        log.info(f"update_rules_text called with {len(new_text)} chars.")
 
         # Persist to settings.json
         settings = load_settings()
         settings["rules_text"] = new_text
         save_settings(settings)
+        log.info("Rules text saved to settings.json.")
 
         # Post to every guild's rules channel
         for guild in self.bot.guilds:
@@ -46,22 +48,27 @@ class Rules(commands.Cog, name="Rules"):
             if not channel:
                 channel = discord.utils.get(guild.text_channels, name="rules")
             if not channel:
-                log.warning(f"No rules channel found in {guild.name}.")
+                log.warning(f"No rules channel found in {guild.name}. Tried ID={RULES_CHANNEL_ID} and name='rules'.")
                 continue
+
+            log.info(f"Found rules channel: #{channel.name} ({channel.id}) in {guild.name}")
 
             # Try to edit the last bot message in the channel, or send a new one
             try:
+                found_existing = False
                 async for msg in channel.history(limit=20):
                     if msg.author.id == self.bot.user.id and "📜" in msg.content:
                         await msg.edit(content=f"📜 **Server Rules**\n\n{new_text}")
                         log.info(f"Updated existing rules message in {channel.name}.")
+                        found_existing = True
                         break
-                else:
-                    # No existing rules message found — send new
+                if not found_existing:
                     await channel.send(f"📜 **Server Rules**\n\n{new_text}")
                     log.info(f"Posted new rules message in {channel.name}.")
             except discord.Forbidden:
                 log.warning(f"Missing permissions to post rules in {channel.name}.")
+            except Exception as e:
+                log.error(f"Failed to post rules in {channel.name}: {e}", exc_info=True)
 
 
 async def setup(bot: commands.Bot):
