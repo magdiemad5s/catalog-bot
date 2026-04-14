@@ -94,7 +94,7 @@ class MinesweeperView(discord.ui.View):
         btn = self.buttons[(x, y)]
         val = self.board[y][x]
         
-        btn.label = str(val) if val > 0 else " "
+        btn.label = str(val) if val > 0 else "\u200b"
         btn.style = discord.ButtonStyle.primary
         btn.disabled = True
         
