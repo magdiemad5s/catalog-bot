@@ -893,13 +893,19 @@ class MafiaCog(commands.Cog):
 
     def _session_to_dict(self, session: GameSession) -> dict:
         """Serializes GameSession to a JSON-safe dict (excludes transient fields)."""
-        data = asdict(session)
-        # Exclude task and message_id
-        if "task" in data: del data["task"]
-        if "lobby_message_id" in data: del data["lobby_message_id"]
-        # Convert set to list
-        if "start_votes" in data: data["start_votes"] = list(data["start_votes"])
-        return data
+        return {
+            "guild_id": session.guild_id,
+            "channel_id": session.channel_id,
+            "host_id": session.host_id,
+            "players": {str(k): asdict(v) for k, v in session.players.items()},
+            "phase": session.phase,
+            "round": session.round,
+            "night_actions": session.night_actions,
+            "mafia_votes": {str(k): v for k, v in session.mafia_votes.items()},
+            "day_votes": {str(k): v for k, v in session.day_votes.items()},
+            "jester_won_id": session.jester_won_id,
+            "start_votes": list(session.start_votes)
+        }
 
     def _session_from_dict(self, data: dict) -> GameSession:
         """Restores GameSession from dict."""
