@@ -79,6 +79,6 @@ class Config:
             gemini_api_key=gemini_api_key,
             gemini_api_key_2=gemini_api_key_2,
             gemini_api_key_3=gemini_api_key_3,
-            web_password=web_password,
+            web_password=web_password
         )
 

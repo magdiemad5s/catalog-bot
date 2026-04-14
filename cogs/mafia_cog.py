@@ -4,9 +4,12 @@ from discord import app_commands
 import random
 import asyncio
 import logging
+import uuid
 from typing import Literal, Dict, List, Optional, Union
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime
+import json
+import time
 
 # --- PIP DEPENDENCIES ---
 # discord.py>=2.3.0
@@ -73,7 +76,11 @@ class GameSession:
     task: Optional[asyncio.Task] = None
 
 # --- SESSION STORE ---
+# These are kept at module level for shared access, but managed by the Cog
 _sessions: Dict[int, GameSession] = {}
+_web_sessions: Dict[str, int] = {} # UUID -> Guild ID
+_rejoin_tokens: Dict[str, Dict[str, int]] = {} # session_id -> {token: user_id}
+_ws_clients: Dict[str, set] = {} # session_id -> set of WebSocketResponse
 
 # --- UI VIEWS ---
 
@@ -110,8 +117,9 @@ class LobbyView(discord.ui.View):
         await self.cog._update_lobby_embed(session)
 
 class NightActionView(discord.ui.View):
-    def __init__(self, role: str, session: GameSession, player: Player, options: List[discord.SelectOption]):
+    def __init__(self, cog: 'MafiaCog', role: str, session: GameSession, player: Player, options: List[discord.SelectOption]):
         super().__init__(timeout=45)
+        self.cog = cog
         self.role = role
         self.session = session
         self.player = player
@@ -137,6 +145,13 @@ class NightActionView(discord.ui.View):
                 content=f"✅ Voted to kill <@{self.target_id}>. Waiting for night to end...",
                 view=self
             )
+            # Broadcast is handled by Mafia kills being private, but we update vote counts
+            session_id = next((k for k, v in _web_sessions.items() if v == self.session.guild_id), None)
+            if session_id:
+                counts = {}
+                for tid in self.session.mafia_votes.values():
+                    counts[tid] = counts.get(tid, 0) + 1
+                asyncio.create_task(self.cog._broadcast_event(session_id, "vote_update", {"votes": counts, "type": "mafia"}))
         else:
             self.session.night_actions[self.role] = self.target_id
             await interaction.response.edit_message(
@@ -146,8 +161,9 @@ class NightActionView(discord.ui.View):
         self.stop()
 
 class VoteView(discord.ui.View):
-    def __init__(self, session: GameSession, options: List[discord.SelectOption]):
+    def __init__(self, cog: 'MafiaCog', session: GameSession, options: List[discord.SelectOption]):
         super().__init__(timeout=60)
+        self.cog = cog
         self.session = session
 
         if options:
@@ -164,6 +180,13 @@ class VoteView(discord.ui.View):
         target_id = int(interaction.data['values'][0])
         self.session.day_votes[interaction.user.id] = target_id
         await interaction.response.send_message(f"Voted for <@{target_id}>.", ephemeral=True)
+        
+        session_id = next((k for k, v in _web_sessions.items() if v == self.session.guild_id), None)
+        if session_id:
+            counts = {}
+            for tid in self.session.day_votes.values():
+                counts[tid] = counts.get(tid, 0) + 1
+            asyncio.create_task(self.cog._broadcast_event(session_id, "vote_update", {"votes": counts, "type": "day"}))
 
 class HelpView(discord.ui.View):
     def __init__(self, user_id: int):
@@ -222,11 +245,83 @@ class MafiaCog(commands.Cog):
         for session in _sessions.values():
             if session.task: session.task.cancel()
 
+    async def cog_load(self):
+        """Reload active sessions from SQLite on restart."""
+        import sqlite3
+        from db.local_db import DB_PATH
+        import time
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            now = int(time.time())
+            cursor.execute("SELECT session_id, guild_id, state_json, rejoin_tokens_json FROM mafia_sessions_persistence WHERE expires_at > ?", (now,))
+            rows = cursor.fetchall()
+            conn.close()
+            
+            for session_id, guild_id, state_json, rejoin_tokens_json in rows:
+                state = json.loads(state_json)
+                tokens = json.loads(rejoin_tokens_json)
+                
+                session = self._session_from_dict(state)
+                _sessions[guild_id] = session
+                _web_sessions[session_id] = guild_id
+                _rejoin_tokens[session_id] = tokens
+                
+                # Resume game loop if in progress
+                if session.phase in ["night", "day"]:
+                    session.task = asyncio.create_task(self._game_loop(session))
+                    
+            log.info(f"Restored {len(rows)} active mafia sessions from SQLite.")
+        except Exception as e:
+            log.error(f"Failed to restore mafia sessions: {e}")
+
     @commands.hybrid_group(name="mafia", fallback="help", description="Mafia game commands and rules.")
     async def mafia(self, ctx: commands.Context):
         """Show full rules and command guide."""
         view = HelpView(ctx.author.id)
         await ctx.send(embed=view.pages[0], view=view, ephemeral=True)
+
+    @mafia.command(name="web", description="Generate a web link for the current game session.")
+    @app_commands.guild_only()
+    async def mafia_web(self, ctx: commands.Context):
+        """Generate a unique URL for the browser-playable version of this session."""
+        session = _sessions.get(ctx.guild.id)
+        
+        # Auto-create lobby if none exists
+        if not session:
+            session = GameSession(ctx.guild.id, ctx.channel.id, ctx.author.id)
+            session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name)
+            _sessions[ctx.guild.id] = session
+            
+            embed = self._make_lobby_embed(session)
+            view = LobbyView(self, ctx.guild.id)
+            msg = await ctx.send(embed=embed, view=view)
+            session.lobby_message_id = msg.id
+        
+        # Check if we already have a web session for this guild
+        session_id = next((k for k, v in _web_sessions.items() if v == ctx.guild.id), None)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            _web_sessions[session_id] = ctx.guild.id
+            _rejoin_tokens[session_id] = {}
+
+        # Fetch base URL from SQLite (with fallback)
+        from db.local_db import get_config
+        base_url = get_config("base_url", "http://localhost:8080")
+            
+        game_url = f"{base_url.rstrip('/')}/mafia/{session_id}"
+        
+        embed = discord.Embed(
+            title="🃏 Mafia Web Link Generated",
+            description=f"You can now play this session in your browser!\n\n**[Click here to Play]({game_url})**",
+            color=0x5865F2
+        )
+        embed.add_field(name="Host", value=ctx.guild.get_member(session.host_id).display_name if ctx.guild.get_member(session.host_id) else "Unknown")
+        embed.add_field(name="Server", value=ctx.guild.name)
+        embed.set_footer(text="Unique session ID: " + session_id)
+        
+        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+        self._persist_session(session_id)
 
     @mafia.command(name="start", description="Open a new Mafia lobby.")
     async def mafia_start(self, ctx: commands.Context):
@@ -301,9 +396,32 @@ class MafiaCog(commands.Cog):
         if ctx.author.id != session.host_id and not ctx.author.guild_permissions.administrator:
             return await ctx.send("You don't have permission to reset the game.", ephemeral=True)
         
-        if session.task: session.task.cancel()
-        del _sessions[ctx.guild.id]
+        await self._force_end_session(ctx.guild.id)
         await ctx.send("🛑 **Game has been force-reset.**")
+
+    async def _force_end_session(self, guild_id: int):
+        """Internal helper to fully clean up a session."""
+        session = _sessions.get(guild_id)
+        if not session: return
+
+        if session.task: session.task.cancel()
+        
+        session_id = next((k for k, v in _web_sessions.items() if v == guild_id), None)
+        if session_id:
+            if session_id in _web_sessions: del _web_sessions[session_id]
+            if session_id in _rejoin_tokens: del _rejoin_tokens[session_id]
+            # Delete from SQLite
+            import sqlite3
+            from db.local_db import DB_PATH
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM mafia_sessions_persistence WHERE session_id = ?", (session_id,))
+                conn.commit()
+                conn.close()
+            except: pass
+
+        if guild_id in _sessions: del _sessions[guild_id]
 
     # --- INTERNAL HELPERS ---
 
@@ -365,6 +483,20 @@ class MafiaCog(commands.Cog):
             # --- RESOLUTION ---
             deaths = await self._resolve_night_actions(session)
             
+            # Broadcast night results summary
+            session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+            if session_id:
+                death_names = [p.display_name for p in deaths]
+                summary = "No one died tonight." if not death_names else f"Died tonight: {', '.join(death_names)}"
+                await self._broadcast_event(session_id, "night_result", {"summary": summary})
+                for p in deaths:
+                    await self._broadcast_event(session_id, "player_died", {
+                        "player_id": p.user_id,
+                        "nickname": p.display_name,
+                        "role_revealed": p.role,
+                        "cause": "Night Action"
+                    })
+
             # --- DAY PHASE ---
             await self._run_day_phase(session, deaths)
             
@@ -406,13 +538,22 @@ class MafiaCog(commands.Cog):
             if not options:
                 continue
 
-            view = NightActionView(p.role, session, p, options)
+            view = NightActionView(self, p.role, session, p, options)
             r_msg = f"Choose your night action for Night {session.round}:"
             try:
                 await user.send(content=r_msg, view=view)
             except Exception:
                 pass
             
+        session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+        if session_id:
+            await self._broadcast_event(session_id, "phase_change", {
+                "phase": "night",
+                "round": session.round,
+                "message": "Night falls. Role actions are active."
+            })
+            self._persist_session(session_id)
+
         await asyncio.sleep(45)
 
     async def _resolve_night_actions(self, session: GameSession) -> List[Player]:
@@ -488,6 +629,15 @@ class MafiaCog(commands.Cog):
         embed = discord.Embed(title=f"☀️ Day {session.round}", description=f"Morning arrives. Here are the events from last night:\n\n{death_txt}", color=COLORS['day'])
         await self._announce(session, embed)
         
+        session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+        if session_id:
+            await self._broadcast_event(session_id, "phase_change", {
+                "phase": "day",
+                "round": session.round,
+                "message": f"Morning reveals the night's events.\n{death_txt}"
+            })
+            self._persist_session(session_id)
+
         # Check win after night deaths
         winner = await self._check_win_condition(session)
         if winner:
@@ -500,7 +650,7 @@ class MafiaCog(commands.Cog):
             discord.SelectOption(label=p.display_name, value=str(p.user_id))
             for p in session.players.values() if p.alive
         ]
-        view = VoteView(session, p_list)
+        view = VoteView(self, session, p_list)
         vote_msg = await channel.send("🗳️ **Discussion phase (60s).** Use the menu below to cast your lynch vote.", view=view)
 
         await asyncio.sleep(60)
@@ -542,6 +692,16 @@ class MafiaCog(commands.Cog):
                 )
                 await self._announce(session, embed)
 
+                session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+                if session_id:
+                    await self._broadcast_event(session_id, "player_died", {
+                        "player_id": target.user_id,
+                        "nickname": target.display_name,
+                        "role_revealed": target.role,
+                        "cause": "Lynched"
+                    })
+                    self._persist_session(session_id)
+
                 if target.role == "Jester":
                     session.jester_won_id = target.user_id
                     await self._end_game(session, "jester")
@@ -577,6 +737,18 @@ class MafiaCog(commands.Cog):
             j_name = session.players[session.jester_won_id].display_name
             title, color = "🃏 Jester Wins!", COLORS['jester_win']
             desc = f"**{j_name}** has been lynched and wins the game!"
+        
+        session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+        if session_id:
+            await self._broadcast_event(session_id, "game_over", {
+                "winner": winner,
+                "reason": desc,
+                "roles": {p.user_id: p.role for p in session.players.values()}
+            })
+            self._persist_session(session_id)
+            # Cleanup web-session and token mappings
+            _web_sessions.pop(session_id, None)
+            _rejoin_tokens.pop(session_id, None)
 
         embed = discord.Embed(title=title, description=desc, color=color)
         
@@ -600,8 +772,95 @@ class MafiaCog(commands.Cog):
                 channel = self.bot.get_channel(session.channel_id)
                 if channel:
                     await channel.send(f"⚠️ **{member.display_name}** has left the server and is now dead.")
-                # Win condition is checked at the next phase milestone to avoid
-                # interrupting the game loop mid-sleep.
+                
+                session_id = next((k for k, v in _web_sessions.items() if v == member.guild.id), None)
+                if session_id:
+                    self._persist_session(session_id)
+                    await self._broadcast_event(session_id, "player_died", {
+                        "player_id": member.id,
+                        "nickname": member.display_name,
+                        "role_revealed": p.role,
+                        "cause": "Left the server"
+                    })
+
+    # --- WEB BRIDGE HELPER ---
+    
+    async def _broadcast_event(self, session_id: str, event_type: str, data: dict):
+        """Broadcasts a JSON event to all connected web clients for this session."""
+        clients = _ws_clients.get(session_id, set())
+        if not clients: return
+        
+        payload = json.dumps({"type": event_type, "data": data})
+        to_remove = set()
+        for ws in clients:
+            try:
+                await ws.send_str(payload)
+            except:
+                to_remove.add(ws)
+        
+        for ws in to_remove:
+            clients.remove(ws)
+
+    def _persist_session(self, session_id: str):
+        """Saves session state to SQLite asynchronously to avoid blocking the event loop."""
+        guild_id = _web_sessions.get(session_id)
+        if not guild_id: return
+        session = _sessions.get(guild_id)
+        if not session: return
+        
+        state = self._session_to_dict(session)
+        tokens = _rejoin_tokens.get(session_id, {})
+        state_json = json.dumps(state)
+        tokens_json = json.dumps(tokens)
+        phase = session.phase
+        
+        async def _do_save():
+            import sqlite3
+            from db.local_db import DB_PATH
+            import time as _time
+            try:
+                now = int(_time.time())
+                expires = now + (2 * 60 * 60) if phase == "ended" else now + (24 * 60 * 60)
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO mafia_sessions_persistence 
+                    (session_id, guild_id, state_json, rejoin_tokens_json, created_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (session_id, guild_id, state_json, tokens_json, now, expires))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                log.error(f"Failed to persist mafia session {session_id}: {e}")
+        
+        asyncio.create_task(_do_save())
+
+    def _session_to_dict(self, session: GameSession) -> dict:
+        """Serializes GameSession to a JSON-safe dict (excludes transient fields)."""
+        data = asdict(session)
+        # Exclude task and message_id
+        if "task" in data: del data["task"]
+        if "lobby_message_id" in data: del data["lobby_message_id"]
+        return data
+
+    def _session_from_dict(self, data: dict) -> GameSession:
+        """Restores GameSession from dict."""
+        players = {}
+        for pid, pdata in data.get("players", {}).items():
+            players[int(pid)] = Player(**pdata)
+        
+        return GameSession(
+            guild_id=data["guild_id"],
+            channel_id=data["channel_id"],
+            host_id=data["host_id"],
+            players=players,
+            phase=data["phase"],
+            round=data["round"],
+            night_actions=data.get("night_actions", {}),
+            mafia_votes={int(k): v for k, v in data.get("mafia_votes", {}).items()},
+            day_votes={int(k): v for k, v in data.get("day_votes", {}).items()},
+            jester_won_id=data.get("jester_won_id")
+        )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MafiaCog(bot))

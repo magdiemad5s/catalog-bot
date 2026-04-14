@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from config import Config
 from db import init_db, get_db
+from db.local_db import init_local_db
 from utils.embeds import error_embed
 
 log = logging.getLogger("bot")
@@ -44,6 +45,9 @@ class LibraryBot(commands.Bot):
             init_db(self.config.supabase_url, self.config.supabase_key)
         else:
             log.warning("Supabase credentials missing — running without database.")
+
+        # --- Local SQLite ---
+        init_local_db()
 
         # --- Cogs ---
         await self._load_cogs()

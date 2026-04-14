@@ -17,6 +17,7 @@ from routes.xp import xp_routes
 from routes.antiraid import antiraid_routes
 from routes.filter import filter_routes
 from routes.games import games_routes
+from routes.mafia import mafia_routes
 from db.client import get_db
 
 log = logging.getLogger("web")
@@ -26,7 +27,7 @@ START_TIME = time.time()
 
 async def auth_middleware(app, handler):
     async def middleware(request):
-        if request.path == '/login' or request.path.startswith('/static/'):
+        if request.path == '/login' or request.path.startswith('/static/') or request.path.startswith('/mafia/'):
             return await handler(request)
         
         session = await get_session(request)
@@ -125,6 +126,39 @@ async def dashboard(request):
         "settings": settings,
         "presets": get_presets(),
         "rules_text": rules_text
+    }
+
+@admin_routes.get("/admin/mafia")
+@aiohttp_jinja2.template("admin_mafia.html")
+async def admin_mafia(request):
+    from db.local_db import get_config
+    bot = request.app['bot']
+    from cogs.mafia_cog import _sessions, _web_sessions
+    
+    # Pack active games for the table
+    games = []
+    for session_id, guild_id in _web_sessions.items():
+        session = _sessions.get(guild_id)
+        if session:
+            guild = bot.get_guild(guild_id)
+            games.append({
+                "session_id": session_id,
+                "guild_name": guild.name if guild else "Unknown",
+                "player_count": len(session.players),
+                "phase": session.phase,
+                "round": session.round
+            })
+
+    return {
+        "active_page": "mafia",
+        "games": games,
+        "base_url": get_config("base_url"),
+        "max_players": get_config("max_players"),
+        "night_duration": get_config("night_duration"),
+        "day_duration": get_config("day_duration"),
+        "jester_enabled": get_config("jester_enabled") == "true",
+        "framer_enabled": get_config("framer_enabled") == "true",
+        "allowed_guilds": get_config("allowed_guilds")
     }
 
 # --- Admin API Routes ---
@@ -249,6 +283,34 @@ async def improve_text_api(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+@admin_routes.post("/admin/api/mafia/settings")
+async def update_mafia_settings(request):
+    # Check session (strict)
+    session = await get_session(request)
+    if not session.get('logged_in'):
+         return web.json_response({"error": "Unauthorized"}, status=401)
+
+    data = await request.json()
+    from db.local_db import set_config
+    for k, v in data.items():
+        set_config(k, str(v))
+    
+    return web.json_response({"success": True})
+
+@admin_routes.post("/admin/api/mafia/force_end/{session_id}")
+async def force_end_mafia(request):
+    session_id = request.match_info['session_id']
+    from cogs.mafia_cog import _web_sessions
+    guild_id = _web_sessions.get(session_id)
+    if guild_id:
+        bot = request.app['bot']
+        cog = bot.get_cog("MafiaCog")
+        if cog:
+            await cog._force_end_session(guild_id)
+            return web.json_response({"success": True})
+    
+    return web.json_response({"error": "Session not found"}, status=404)
+
 # --- App Factory ---
 
 def create_app(bot):
@@ -288,5 +350,6 @@ def create_app(bot):
     app.add_routes(antiraid_routes)
     app.add_routes(filter_routes)
     app.add_routes(games_routes)
+    app.add_routes(mafia_routes)
     
     return app
