@@ -522,8 +522,10 @@ class MafiaCog(commands.Cog):
         p_ids = list(session.players.keys())
         random.shuffle(p_ids)
         
-        if count <= 6:
-            r_list = ["Mafia", "Mafia", "Detective", "Doctor"] + ["Villager"] * (count - 4)
+        if count <= 5:
+            r_list = ["Mafia", "Detective", "Doctor"] + ["Villager"] * max(0, count - 3)
+        elif count == 6:
+            r_list = ["Mafia", "Mafia", "Detective", "Doctor", "Villager", "Villager"]
         elif count <= 9:
             r_list = ["Mafia", "Mafia", "Detective", "Doctor", "Vigilante", "Framer"] + ["Villager"] * (count - 6)
         else:
