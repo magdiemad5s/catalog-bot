@@ -5,11 +5,12 @@ import random
 import asyncio
 import logging
 import uuid
-from typing import Literal, Dict, List, Optional, Union
+from typing import Literal, Dict, List, Optional, Union, Set
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 import json
 import time
+import math
 
 # --- PIP DEPENDENCIES ---
 # discord.py>=2.3.0
@@ -448,7 +449,6 @@ class MafiaCog(commands.Cog):
         
         count = len(session.players)
         votes = len(session.start_votes)
-        import math
         threshold = math.ceil(count * 0.75)
         
         if votes >= threshold and count >= 5:
