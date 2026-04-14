@@ -258,11 +258,11 @@ def create_app(bot):
     if secret_key:
         if len(secret_key) < 32:
             secret_key = secret_key.ljust(32, '0')
-        fernet_key = base64.urlsafe_b64encode(secret_key[:32].encode())
+        fernet_key = secret_key[:32].encode()
     else:
         # Secure generation if key is missing
         log.warning("WEB_SECRET_KEY missing in .env! Generating a volatile random key for this session.")
-        fernet_key = base64.urlsafe_b64encode(os.urandom(32))
+        fernet_key = os.urandom(32)
         
     setup(app, EncryptedCookieStorage(fernet_key))
     
