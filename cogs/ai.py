@@ -159,8 +159,8 @@ class AI(commands.Cog, name="AI"):
           gemma-4-31b-it (config stripped) → gemma-4-26b-a4b-it (config stripped)
         """
         # --- Model configuration ---
-        primary_model   = 'gemini-2.5-flash-lite-preview' if is_main_chat else 'gemini-2.5-flash-preview'
-        secondary_model = 'gemini-2.5-flash-preview'       if is_main_chat else None  # chat-path only
+        primary_model   = 'gemini-3.1-flash-lite-preview' if is_main_chat else 'gemini-3-flash-preview'
+        secondary_model = 'gemini-3-flash-preview'        if is_main_chat else None  # chat-path only
 
         FALLBACK_CHAIN = [
             'gemini-2.5-flash',
