@@ -1,0 +1,257 @@
+{% extends "base_admin.html" %}
+
+{% block page_title %}Word Filter System{% endblock %}
+
+{% block header_actions %}
+<button onclick="document.getElementById('add_profile_modal').style.display='flex'">
+    <i class="fas fa-plus"></i> New Profile
+</button>
+{% endblock %}
+
+{% block extra_style %}
+<style>
+    .filter-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; }
+    
+    .profile-item {
+        padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.03);
+        border: 1px solid var(--surface-border); margin-bottom: 0.75rem;
+        cursor: pointer; transition: all 0.2s;
+    }
+    .profile-item:hover { border-color: var(--primary); }
+    .profile-item.active { border-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
+    
+    .tag-container {
+        display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem;
+        padding: 1rem; background: #09090b; border-radius: 8px; border: 1px solid var(--surface-border);
+    }
+    .tag {
+        background: var(--primary); color: #fff; padding: 0.25rem 0.75rem;
+        border-radius: 4px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;
+    }
+    .tag i { cursor: pointer; opacity: 0.7; }
+    .tag i:hover { opacity: 1; }
+    
+    .log-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .log-table th { text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--surface-border); color: var(--text-muted); }
+    .log-table td { padding: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    
+    .matched { color: var(--danger); font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 2px 4px; border-radius: 3px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="filter-grid">
+    <div class="profiles-column">
+        <div class="card">
+            <h3 style="margin-top: 0;">Profiles</h3>
+            <div id="profiles_list">
+                {% for profile in profiles %}
+                <div class="profile-item {% if config.active_profile_id == profile.id %}active{% endif %}" 
+                     data-id="{{ profile.id }}"
+                     data-name="{{ profile.name | forceescape }}"
+                     data-words="{{ profile.word_list | tojson | forceescape }}"
+                     onclick="selectProfileFromElement(this)">
+                    <div style="font-weight: 600;">{{ profile.name }}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">{{ profile.word_list|length }} words tracked</div>
+                </div>
+                {% else %}
+                <p style="color: var(--text-muted); text-align: center;">No profiles created.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Global Configuration</h3>
+            <form onsubmit="saveConfig(event)">
+                <input type="hidden" name="guild_id" value="{{ config.guild_id }}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <label style="margin: 0;">Filter Enabled</label>
+                    <label class="switch">
+                        <input type="checkbox" name="enabled" {% if config.enabled %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <label>Active Profile</label>
+                <select name="active_profile_id">
+                    <option value="">-- None --</option>
+                    {% for p in profiles %}
+                    <option value="{{ p.id }}" {% if config.active_profile_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+
+                <label>Violation Threshold</label>
+                <input type="number" name="threshold" value="{{ config.threshold }}" min="1">
+
+                <label>Mod Report Channel</label>
+                <select name="mod_channel_id">
+                    <option value="">-- No Reports --</option>
+                    {% for c in channels %}
+                    <option value="{{ c.id }}" {% if config.mod_channel_id == c.id %}selected{% endif %}>#{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit" style="width: 100%; justify-content: center;">Save Filter Rules</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="editor-column">
+        <div class="card" id="editor_card" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h3 style="margin: 0;">Editor: <span id="current_profile_name"></span></h3>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="secondary" onclick="saveProfile()"><i class="fas fa-save"></i> Save</button>
+                    <button class="danger" onclick="deleteProfile()"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+            
+            <label>Add Words (press Enter)</label>
+            <input type="text" id="word_input" placeholder="type word..." onkeydown="if(event.key==='Enter') addWord()">
+            
+            <div class="tag-container" id="tag_container"></div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-top: 0;">Incident Logs (Last 50)</h3>
+            <div style="overflow-x: auto;">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Word</th>
+                            <th>Channel</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td>{{ log.user_id }}</td>
+                            <td><span class="matched">{{ log.matched_word }}</span></td>
+                            <td>#{{ log.channel_id }}</td>
+                            <td style="color: var(--text-muted);">{{ log.created_at[:16] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="add_profile_modal" class="modal">
+    <div class="modal-content">
+        <h3>Create New Profile</h3>
+        <input type="text" id="new_profile_name" placeholder="e.g. Excessive Profanity">
+        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+            <button class="secondary" style="flex: 1;" onclick="document.getElementById('add_profile_modal').style.display='none'">Cancel</button>
+            <button style="flex: 2;" onclick="submitNewProfile()">Create Profile</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    let currentProfile = null;
+    let currentWords = [];
+
+    function selectProfileFromElement(el) {
+        const id = parseInt(el.getAttribute('data-id'));
+        const name = el.getAttribute('data-name');
+        const words = JSON.parse(el.getAttribute('data-words') || '[]');
+        
+        currentProfile = id;
+        currentWords = words;
+        document.getElementById('current_profile_name').innerText = name;
+        document.getElementById('editor_card').style.display = 'block';
+        renderTags();
+        
+        // Highlight in list
+        document.querySelectorAll('.profile-item').forEach(e => e.classList.remove('active'));
+        el.classList.add('active');
+    }
+
+
+    function renderTags() {
+        const container = document.getElementById('tag_container');
+        container.innerHTML = currentWords.map((w, i) => `
+            <div class="tag">
+                ${w} <i class="fas fa-times" onclick="removeWord(${i})"></i>
+            </div>
+        `).join('');
+    }
+
+    function addWord() {
+        const input = document.getElementById('word_input');
+        const val = input.value.trim().toLowerCase();
+        if (val && !currentWords.includes(val)) {
+            currentWords.push(val);
+            renderTags();
+        }
+        input.value = '';
+    }
+
+    function removeWord(index) {
+        currentWords.splice(index, 1);
+        renderTags();
+    }
+
+    async function saveProfile() {
+        const name = document.getElementById('current_profile_name').innerText;
+        try {
+            await API.request(`/admin/api/filter/profiles/${currentProfile}`, {
+                method: 'PUT',
+                body: { name, word_list: currentWords }
+            });
+            showToast('Profile updated!');
+            location.reload();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    async function deleteProfile() {
+        if (!confirm('Delete this profile?')) return;
+        try {
+            await API.delete(`/admin/api/filter/profiles/${currentProfile}`);
+            location.reload();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    async function submitNewProfile() {
+        const name = document.getElementById('new_profile_name').value;
+        if (!name) return;
+        try {
+            await API.post('/admin/api/filter/profiles', { 
+                guild_id: "{{ config.guild_id }}",
+                name: name,
+                word_list: []
+            });
+            location.reload();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    async function saveConfig(e) {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        data.enabled = e.target.enabled.checked;
+        
+        await withLoading(btn, async () => {
+            try {
+                await API.post('/admin/api/filter/config', data);
+                showToast('Filter config updated!');
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    }
+</script>
+{% endblock %}

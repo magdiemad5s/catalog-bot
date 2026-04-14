@@ -1,0 +1,119 @@
+{% extends "base_public.html" %}
+
+{% block title %}Login - Catalog Admin{% endblock %}
+
+{% block extra_style %}
+
+<style>
+    .login-card {
+        max-width: 400px;
+        margin: 0 auto;
+        background: var(--surface);
+        border: 1px solid var(--surface-border);
+        padding: 2.5rem;
+        border-radius: 16px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .login-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .login-header h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        color: #fff;
+    }
+
+    .login-header p {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+
+    label {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        color: var(--text-muted);
+    }
+
+    input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--surface-border);
+        background: #09090b;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
+        box-sizing: border-box;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+
+    button {
+        width: 100%;
+        padding: 0.85rem;
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+    }
+
+    button:hover {
+        background: var(--primary-hover);
+    }
+
+    button:active {
+        transform: scale(0.98);
+    }
+
+    .error-msg {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: var(--danger);
+        padding: 0.75rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-card">
+    <div class="login-header">
+        <h1>Welcome Back</h1>
+        <p>Enter your credentials to access the hub</p>
+    </div>
+
+    {% if error %}
+    <div class="error-msg">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/login">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autocomplete="username" placeholder="admin">
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password"
+            placeholder="••••••••">
+
+        <button type="submit">Unlock Console</button>
+    </form>
+</div>
+{% endblock %}

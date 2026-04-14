@@ -1,0 +1,388 @@
+{% extends "base_admin.html" %}
+
+{% block page_title %}Control Hub{% endblock %}
+
+{% block extra_style %}
+<style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+    
+    .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    .stat-box { background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2); padding: 1rem; border-radius: 8px; }
+    .stat-box.danger { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
+    .stat-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; }
+    .stat-value { font-size: 1.5rem; font-weight: 700; margin-top: 0.5rem; color: #fff; }
+    
+    .preset-controls { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+    .preset-controls select { margin-bottom: 0; }
+    
+    .save-preset-row { 
+        display: flex; gap: 0.5rem; align-items: flex-end; 
+        margin-bottom: 1.25rem; background: rgba(255,255,255,0.03); 
+        padding: 1rem; border-radius: 8px; border: 1px dashed var(--surface-border); 
+    }
+    .save-preset-row div { flex-grow: 1; }
+    .save-preset-row input { margin-bottom: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <div class="card">
+        <h3><i class="fas fa-satellite-dish"></i> Live Telemetry</h3>
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-label">Servers</div>
+                <div class="stat-value">{{ stats.guild_count }}</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Latency</div>
+                <div class="stat-value">{{ stats.latency }}ms</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Uptime</div>
+                <div class="stat-value">{{ stats.uptime }}h</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Queries</div>
+                <div class="stat-value">{{ stats.total_requests }}</div>
+            </div>
+            <div class="stat-box danger">
+                <div class="stat-label">Rate Limits</div>
+                <div class="stat-value">{{ stats.total_rate_limits }}</div>
+            </div>
+            <div class="stat-box danger">
+                <div class="stat-label">Throttled</div>
+                <div class="stat-value">{{ stats.active_throttled }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h3><i class="fas fa-user-edit"></i> Character Presets</h3>
+        <div class="preset-controls">
+            <select id="preset_select" onchange="loadPreset(this)" style="flex-grow: 1;">
+                <option value="">-- Select personality --</option>
+                <option value="You are Catalog, a funny, slightly unhinged Discord librarian who occasionally ragebaits and stirs the pot, but ultimately remains a helpful assistant. Keep your responses concise for Discord chat. Add humor and light sarcasm.">Default (Catalog)</option>
+                {% for name, content in presets.items() %}
+                <option value="{{ content | forceescape }}" data-name="{{ name | forceescape }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" class="secondary" onclick="renameCurrentPreset()">Rename</button>
+            <button type="button" class="danger" onclick="deleteCurrentPreset()"><i class="fas fa-trash"></i></button>
+        </div>
+        
+        <div class="save-preset-row">
+            <div>
+                <label>Save current as Preset</label>
+                <input type="text" id="new_preset_name" placeholder="E.g. Angry Librarian">
+            </div>
+            <button type="button" onclick="saveNewPreset()">Save</button>
+        </div>
+    </div>
+</div>
+
+<form id="settings_form" onsubmit="saveSettings(event)">
+    <div class="card">
+        <h3><i class="fas fa-tools"></i> System Configuration</h3>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>Global AI Engine</label>
+                <select name="ai_enabled">
+                    <option value="true" {% if settings.ai_enabled %}selected{% endif %}>Online (Enabled)</option>
+                    <option value="false" {% if not settings.ai_enabled %}selected{% endif %}>Suspended (Disabled)</option>
+                </select>
+            </div>
+            <div>
+                <label>Welcome Sequence module</label>
+                <select name="welcome_enabled">
+                    <option value="true" {% if settings.welcome_enabled %}selected{% endif %}>Active</option>
+                    <option value="false" {% if not settings.welcome_enabled %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+        </div>
+        
+        <label style="margin-top: 1rem;">System Prompt Array (AI Character Directives)</label>
+        <textarea id="sys_prompt_area" name="system_prompt" rows="8">{{ settings.system_prompt }}</textarea>
+        
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
+            <div>
+                <label>Rate Lmt Count</label>
+                <input type="number" name="rate_limit_count" value="{{ settings.rate_limit_count }}">
+            </div>
+            <div>
+                <label>Rate Window (s)</label>
+                <input type="number" name="rate_limit_window" value="{{ settings.rate_limit_window }}">
+            </div>
+            <div>
+                <label>Reaction %</label>
+                <input type="number" name="reaction_chance" value="{{ settings.reaction_chance }}" min="0" max="100">
+            </div>
+            <div>
+                <label>Intercept %</label>
+                <input type="number" name="interception_chance" value="{{ settings.interception_chance }}" min="0" max="100">
+            </div>
+        </div>
+        
+        <label>Interception Keywords (keyword:chance, ...)</label>
+        <input type="text" name="interception_keywords" value="{{ settings.interception_keywords }}">
+        
+        <button type="submit" style="width: 100%; justify-content: center; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);">
+            <i class="fas fa-sync"></i> Synchronize Directives & Save
+        </button>
+    </div>
+</form>
+
+<div class="card">
+    <h3><i class="fas fa-scroll"></i> Server Rules Governance</h3>
+    <form id="rules_form" onsubmit="saveRules(event)">
+        <label>Rules Document (Live on Discord)</label>
+        <textarea name="rules_text" rows="5">{{ rules_text }}</textarea>
+        <button type="submit" class="secondary" style="width: 100%; justify-content: center;">
+            <i class="fas fa-paper-plane"></i> Publish Rules Update
+        </button>
+    </form>
+</div>
+
+<div class="card" style="border-color: rgba(239, 68, 68, 0.4);">
+    <h3><i class="fas fa-broadcast-tower" style="color: var(--danger)"></i> Live Stream Announcement</h3>
+    
+    <div class="preset-controls" style="align-items: center;">
+        <select id="template_select" onchange="loadSelectedTemplate(this)" style="flex-grow: 1; margin: 0;">
+            <option value="">-- Load Template --</option>
+        </select>
+        <button type="button" class="secondary" onclick="saveTemplate()">Save Template</button>
+        <button type="button" class="danger" onclick="deleteSelectedTemplate()"><i class="fas fa-trash"></i></button>
+    </div>
+    <hr style="border: 0; border-top: 1px solid var(--surface-border); margin: 1.5rem 0;">
+    
+    <form id="live_announce_form" onsubmit="broadcastStream(event)" oninput="saveDraft()">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <label style="margin-bottom: 0;">Main Message Text</label>
+            <div>
+                <button type="button" id="revert_message_content" class="secondary" onclick="revertText('message_content')" style="display: none; padding: 0.25rem 0.75rem; font-size: 0.8rem;">Revert</button>
+                <button type="button" class="secondary" onclick="improveText('message_content')" style="padding: 0.25rem 0.75rem; font-size: 0.8rem; background: #8b5cf6;">✨ AI Improve</button>
+            </div>
+        </div>
+        <textarea name="message_content" rows="3" placeholder="🚨 HYPING UP THE STREAM 🚨"></textarea>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            <div>
+                <label>Streamer Name</label>
+                <input type="text" name="streamer_name" required>
+            </div>
+            <div>
+                <label>Game</label>
+                <input type="text" name="game">
+            </div>
+        </div>
+    
+        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <label style="margin-bottom: 0;">Stream Title</label>
+            <div>
+                <button type="button" id="revert_title" class="secondary" onclick="revertText('title')" style="display: none; padding: 0.25rem 0.75rem; font-size: 0.8rem;">Revert</button>
+                <button type="button" class="secondary" onclick="improveText('title')" style="padding: 0.25rem 0.75rem; font-size: 0.8rem; background: #8b5cf6;">✨ AI Improve</button>
+            </div>
+        </div>
+        <input type="text" name="title" required>
+        
+        <label>Stream Link</label>
+        <input type="url" name="link" required>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>Custom Image URL</label>
+                <input type="url" name="image_url">
+            </div>
+            <div>
+                <label>Streamer Avatar URL</label>
+                <input type="url" name="avatar_url">
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>Ping Notification</label>
+                <select name="ping_type" onchange="togglePingInput(this)">
+                    <option value="none">No Ping</option>
+                    <option value="everyone">@everyone</option>
+                    <option value="role">Specific Role</option>
+                </select>
+            </div>
+            <div id="ping_role_div" style="display: none;">
+                <label>Role ID</label>
+                <input type="text" name="role_id">
+            </div>
+        </div>
+        
+        <button type="submit" id="broadcast_btn" class="danger" style="width: 100%; justify-content: center; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);">
+            <i class="fas fa-bullhorn"></i> Broadcast Announcement
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    // System Config
+    async function saveSettings(e) {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        data.ai_enabled = data.ai_enabled === 'true';
+        data.welcome_enabled = data.welcome_enabled === 'true';
+        
+        await withLoading(btn, async () => {
+            try {
+                await API.post('/admin/api/settings', data);
+                showToast('Directives synchronized successfully!');
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    }
+
+    async function saveRules(e) {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        const formData = new FormData(e.target);
+        
+        await withLoading(btn, async () => {
+            try {
+                await API.post('/admin/api/rules', { rules_text: formData.get('rules_text') });
+                showToast('Rules published to Discord!');
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    }
+
+    // Presets
+    function loadPreset(select) {
+        if (select.value) {
+            document.getElementById('sys_prompt_area').value = select.value;
+        }
+    }
+
+    async function saveNewPreset() {
+        const name = document.getElementById('new_preset_name').value;
+        const prompt = document.getElementById('sys_prompt_area').value;
+        if (!name || !prompt) return showToast('Name and prompt required', 'error');
+        
+        try {
+            await API.post('/admin/api/presets', { name, prompt });
+            location.reload();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    // Streams
+    function togglePingInput(select) {
+        document.getElementById('ping_role_div').style.display = select.value === 'role' ? 'block' : 'none';
+    }
+
+    async function broadcastStream(e) {
+        e.preventDefault();
+        const btn = document.getElementById('broadcast_btn');
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        
+        await withLoading(btn, async () => {
+            try {
+                await API.post('/admin/api/announce_live', data);
+                showToast('Broadcast dispatched!');
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    }
+
+    // AI Improve
+    let backups = {};
+    async function improveText(field) {
+        const el = document.querySelector(`[name="${field}"]`);
+        if (!el.value) return;
+        
+        backups[field] = el.value;
+        const originalValue = el.value;
+        el.value = "🤖 Tuning...";
+        el.disabled = true;
+        
+        try {
+            const data = await API.post('/admin/api/improve_text', { text: originalValue });
+            el.value = data.improved_text;
+            document.getElementById(`revert_${field}`).style.display = 'inline-block';
+        } catch (err) {
+            showToast(err.message, 'error');
+            el.value = originalValue;
+        } finally {
+            el.disabled = false;
+        }
+    }
+
+    function revertText(field) {
+        if (backups[field]) {
+            document.querySelector(`[name="${field}"]`).value = backups[field];
+            document.getElementById(`revert_${field}`).style.display = 'none';
+        }
+    }
+    
+    // Draft / Template Management (Local)
+    function saveDraft() {
+        const form = document.getElementById('live_announce_form');
+        const fd = new FormData(form);
+        localStorage.setItem('live_draft', JSON.stringify(Object.fromEntries(fd)));
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        const draft = localStorage.getItem('live_draft');
+        if (draft) {
+            const data = JSON.parse(draft);
+            const form = document.getElementById('live_announce_form');
+            for (const key in data) {
+                const el = form.querySelector(`[name="${key}"]`);
+                if (el) el.value = data[key];
+            }
+            if (data.ping_type) togglePingInput(form.querySelector('[name="ping_type"]'));
+        }
+        updateTemplateSelect();
+    });
+
+    function saveTemplate() {
+        const name = prompt("Template name:");
+        if (!name) return;
+        const form = document.getElementById('live_announce_form');
+        const fd = new FormData(form);
+        const templates = JSON.parse(localStorage.getItem('live_templates') || '{}');
+        templates[name] = Object.fromEntries(fd);
+        localStorage.setItem('live_templates', JSON.stringify(templates));
+        updateTemplateSelect();
+        showToast('Template saved locally');
+    }
+
+    function updateTemplateSelect() {
+        const sel = document.getElementById('template_select');
+        const templates = JSON.parse(localStorage.getItem('live_templates') || '{}');
+        sel.innerHTML = '<option value="">-- Load Template --</option>';
+        for (const name in templates) {
+            const opt = document.createElement('option');
+            opt.value = name; opt.textContent = name;
+            sel.appendChild(opt);
+        }
+    }
+
+    function loadSelectedTemplate(sel) {
+        if (!sel.value) return;
+        const templates = JSON.parse(localStorage.getItem('live_templates') || '{}');
+        const data = templates[sel.value];
+        const form = document.getElementById('live_announce_form');
+        for (const key in data) {
+            const el = form.querySelector(`[name="${key}"]`);
+            if (el) el.value = data[key];
+        }
+        togglePingInput(form.querySelector('[name="ping_type"]'));
+    }
+</script>
+{% endblock %}

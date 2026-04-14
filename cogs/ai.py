@@ -275,357 +275,245 @@ class AI(commands.Cog, name="AI"):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Ignore our own messages or other bots
-        if message.author.bot:
+        """Unified entry point for AI chat processing."""
+        if message.author.bot or not self.ai_enabled:
             return
-
-        # Respect the AI killswitch from the web panel
-        if not self.ai_enabled:
-            return
-
-        # Check if the AI client is fully initialized
         if not self.primary_clients and not self.fallback_client:
             return
 
-        # Prevent double-responding if they are in the Welcome onboarding flow
+        # Check for Welcome onboarding skip
         welcome_cog = self.bot.get_cog("Welcome")
         if welcome_cog and message.author.id in welcome_cog.active_onboarding:
             return
 
-        # If in a server, require a mention. If in a DM, respond to everything.
+        # Context-based trigger requirements
         if message.guild and not self.bot.user.mentioned_in(message):
             return
 
-        # Deny DM interaction if user already has a library card
+        # Blocked DMs for registered users
         if isinstance(message.channel, discord.DMChannel):
             try:
                 db = get_db()
-                res = db.table("user_profiles").select("has_library_card").eq("user_id", message.author.id).execute()
+                res = await asyncio.to_thread(lambda: db.table("user_profiles").select("has_library_card").eq("user_id", message.author.id).execute())
                 if res.data and res.data[0].get("has_library_card"):
                     await message.reply("You're officially registered now! I don't chat in DMs anymore—please come ping me in the server at **☕〃the-main-hall** to talk.")
                     return
             except Exception as e:
                 log.warning(f"Failed to check DB for DM block: {e}")
 
-        # We don't want to reply to command invocations (like `!rank @Catalog`)
+        # Command check
         prefix = getattr(self.bot, "command_prefix", "!")
         if message.content.startswith(prefix):
             return
 
-        # Clean the message content by removing the actual ping format <@12345>
-        # so the AI doesn't get confused by random number strings
+        # Prepare prompt
         ping_pattern = f"<@!?{self.bot.user.id}>"
-        clean_prompt = re.sub(ping_pattern, "", message.content).strip()
-
-        # If they just pinged without saying anything
-        if not clean_prompt:
-            clean_prompt = "Hello!"
+        clean_prompt = re.sub(ping_pattern, "", message.content).strip() or "Hello!"
 
         try:
-            # Show the user we are "thinking"
             async with message.channel.typing():
+                # 1. Gather context & Dossier
+                dynamic_system_instruction = await self._get_user_context(message.author)
                 
-                # Fetch dossier & profile info from DB
-                db = get_db()
-                row = db.table("user_profiles").select("dossier, recent_flags").eq("user_id", message.author.id).execute()
+                # 2. Build history & attachments
+                contents = await self._prepare_chat_contents(message, clean_prompt)
                 
-                dossier_text = ""
-                flags_text = ""
-                if row.data:
-                    dossier = row.data[0].get("dossier", "").strip()
-                    flags = row.data[0].get("recent_flags", "").strip()
-                    if dossier:
-                        dossier_text = f"\nWhat you know about this user:\n{dossier}"
-                    if flags:
-                        flags_text = f"\nRecent updates about this user:\n{flags}\n(If these are relevant to the conversation, feel free to bring them up naturally)."
+                # 3. Optional Web Search Pre-pass
+                web_context = await self._handle_web_search(message, clean_prompt, contents)
+                if web_context:
+                    dynamic_system_instruction += web_context
 
-                dynamic_system_instruction = (
-                    f"{self.system_instruction}\n\n"
-                    f"You are currently talking to: {message.author.display_name}."
-                    f"{dossier_text}"
-                    f"{flags_text}"
-                )
-
-                # Define function declaration tools
-                search_history_func = types.FunctionDeclaration(
-                    name="search_discord_history",
-                    description="Searches the recent Discord channel history for specific keywords. Use this when the user asks what we were talking about, or if they ask about a past message.",
-                    parameters={
-                        "type": "OBJECT",
-                        "properties": {
-                            "query": {"type": "STRING", "description": "The keyword or topic to search for in past messages."}
-                        },
-                        "required": ["query"]
-                    }
-                )
-
-                update_profile_func = types.FunctionDeclaration(
-                    name="update_user_profile",
-                    description="Saves a permanent fact or detail about the user to their profile dossier. Use this when the user tells you personal details (e.g. 'I just got a dog', 'I like pizza').",
-                    parameters={
-                        "type": "OBJECT",
-                        "properties": {
-                            "fact": {"type": "STRING", "description": "A concise summary of the new fact to remember about the user."}
-                        },
-                        "required": ["fact"]
-                    }
-                )
-
-                # Setup configuration for the model, enabling Function Tools!
+                # 4. Configuration
                 config = types.GenerateContentConfig(
                     system_instruction=dynamic_system_instruction,
                     tools=[
-                        search_history_func, 
-                        update_profile_func
+                        types.FunctionDeclaration(
+                            name="search_discord_history",
+                            description="Searches the recent Discord channel history for specific keywords.",
+                            parameters={"type": "OBJECT", "properties": {"query": {"type": "STRING"}}, "required": ["query"]}
+                        ),
+                        types.FunctionDeclaration(
+                            name="update_user_profile",
+                            description="Saves a permanent fact or detail about the user to their profile dossier.",
+                            parameters={"type": "OBJECT", "properties": {"fact": {"type": "STRING"}}, "required": ["fact"]}
+                        )
                     ],
                     automatic_function_calling={"disable": True},
                     temperature=0.7,
                 )
-                
-                # Gather short term memory context (last 5 messages)
-                contents = []
-                
-                # Identify if this is a reply to another message
-                referenced_msg = None
-                if message.reference:
-                    # Check cache first
-                    if isinstance(message.reference.resolved, discord.Message):
-                        referenced_msg = message.reference.resolved
-                    else:
-                        # Fetch from API if not cached
-                        try:
-                            referenced_msg = await message.channel.fetch_message(message.reference.message_id)
-                        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                            referenced_msg = None
 
-                history_limit = 5
-                history = [m async for m in message.channel.history(limit=history_limit, before=message)]
-                history.reverse() # Oldest to newest
+                # 5. Core Model Execution
+                reply_text = await self._execute_model_flow(message, contents, config)
                 
-                for past_msg in history:
-                    # Don't include bot command invocations in history to reduce noise
-                    if past_msg.content.startswith(prefix):
-                        continue
-                    
-                    # Avoid double-including the referenced message if it's already in the recent history
-                    if referenced_msg and past_msg.id == referenced_msg.id:
-                        continue
-                        
-                    role = "model" if past_msg.author.id == self.bot.user.id else "user"
-                    
-                    text_content = past_msg.content
-                    if role == "user":
-                        # Strip ping formatting out of history so the bot isn't distracted
-                        text_content = re.sub(ping_pattern, "", text_content).strip()
-                        if not text_content:
-                            continue
-                        text_content = f"{past_msg.author.display_name}: {text_content}"
-                        
-                    if text_content:
-                        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=text_content)]))
-                
-                # If there IS a referenced message, inject it now as a specialized context "user" turn
-                if referenced_msg:
-                    ref_parts = []
-                    ref_text = f"[Replying to {referenced_msg.author.display_name}: \"{referenced_msg.content or '(no text)'}\"]"
-                    ref_parts.append(types.Part.from_text(text=ref_text))
-                    
-                    # Include images from the referenced message
-                    if referenced_msg.attachments:
-                        for attachment in referenced_msg.attachments:
-                            if attachment.content_type and attachment.content_type.startswith("image/"):
-                                try:
-                                    img_data = await attachment.read()
-                                    ref_parts.append(
-                                        types.Part.from_bytes(data=img_data, mime_type=attachment.content_type)
-                                    )
-                                except Exception as e:
-                                    log.warning(f"Failed to read attachment from referenced message: {e}")
-                    
-                    contents.append(types.Content(role="user", parts=ref_parts))
+                # 6. Response & Post-processing
+                if reply_text:
+                    await message.reply(reply_text[:2000])
+                    if message.guild:
+                        self._log_interaction(message.guild.id, message.author.id)
 
-                # Finally, append the CURRENT message
-                current_parts = [types.Part.from_text(text=clean_prompt)]
-                
-                # Download and attach any images from the current message
-                if message.attachments:
-                    for attachment in message.attachments:
-                        # Check if it's an image
-                        if attachment.content_type and attachment.content_type.startswith("image/"):
-                            image_bytes = await attachment.read()
-                            current_parts.append(
-                                types.Part.from_bytes(
-                                    data=image_bytes,
-                                    mime_type=attachment.content_type
-                                )
-                            )
-                
-                contents.append(types.Content(role="user", parts=current_parts))
-
-                # --- Search Pre-pass ---
-                prompt_lower = clean_prompt.lower()
-                web_context = ""
-                auto_search = (message.guild and message.guild.id in self.auto_web_guilds) or (message.author.id in self.auto_web_users)
-                # Tightened manual trigger to avoid false positives
-                manual_search = "search on web" in prompt_lower or prompt_lower.startswith("web:") or prompt_lower.startswith("search:")
-                
-                if auto_search or manual_search:
-                    try:
-                        # Use Gemini to determine if search is needed and get queries
-                        # Build a compact history for the query maker
-                        recent_context = ""
-                        for c in contents[-3:]: # last few turns
-                            for p in c.parts:
-                                if hasattr(p, 'text'):
-                                    recent_context += f"{c.role}: {p.text}\n"
-
-                        query_maker = (
-                            "You are a search query generator.\n"
-                            f"LATEST MESSAGE: '{clean_prompt}'\n"
-                            f"Recent Context: {recent_context}\n\n"
-                            "TASK: If the LATEST MESSAGE asks a factual question requiring live internet access, generate up to 2 DuckDuckGo queries. "
-                            "Use the Recent Context ONLY to figure out missing pronouns (like 'it', 'this book', 'latest chapter'). "
-                            "Do NOT generate queries for things related to the chat itself, user names, emojis, or casual greetings. "
-                            "IMPORTANT: Strip meta-commands like 'search the web' from the queries. Output EXACTLY a JSON array of strings, or [] if no search is needed."
-                        )
-                        
-                        query_response = await self._generate_with_fallback(contents=query_maker)
-                        
-                        if query_response and query_response.text:
-                            raw_text = query_response.text.strip()
-                            # Strip markdown fences if present
-                            if raw_text.startswith("```json"):
-                                raw_text = raw_text[7:-3].strip()
-                            elif raw_text.startswith("```"):
-                                raw_text = raw_text[3:-3].strip()
-                            
-                            try:
-                                search_queries = json.loads(raw_text)
-                                if not isinstance(search_queries, list):
-                                    search_queries = [str(search_queries)]
-                            except Exception as parse_e:
-                                log.error(f"Failed to parse JSON queries, falling back: {parse_e}")
-                                # Fallback: try to find anything that looks like a search query
-                                search_queries = [raw_text.replace('"', '').strip()[:50]]
-                                
-                            if search_queries and any(q.strip() for q in search_queries):
-                                log.info(f"Generated Web Queries: {search_queries}")
-                                
-                                def fetch_web():
-                                    all_results = []
-                                    # Limit to 3 queries max
-                                    for q in search_queries[:3]:
-                                        if not q.strip(): continue
-                                        try:
-                                            # Use max_results=3 for token efficiency
-                                            res = DDGS().text(q, max_results=3)
-                                            if res:
-                                                snippets = "\n".join([f"- {r.get('title', '')}: {r.get('body', '')}" for r in res])
-                                                all_results.append(f"🔍 [Search: '{q}']:\n{snippets}")
-                                            # Be polite to DDG (Note: This sleep is safe as it's within a background thread)
-                                            time.sleep(1) 
-                                        except Exception as inner_e:
-                                            log.warning(f"DDG query '{q}' failed: {inner_e}")
-                                    return "\n\n".join(all_results)
-                                
-                                search_results = await asyncio.to_thread(fetch_web)
-                                if search_results and search_results.strip():
-                                    web_context = f"\n\n[Live Web Search Context]\nFacts gathered automatically from DuckDuckGo:\n{search_results}\n"
-                                    # Inject context into the system prompt
-                                    dynamic_system_instruction += web_context
-                                    # Rebuild config instead of mutating it to ensure compatibility
-                                    config = types.GenerateContentConfig(
-                                        system_instruction=dynamic_system_instruction,
-                                        tools=config.tools,
-                                        automatic_function_calling=config.automatic_function_calling,
-                                        temperature=config.temperature
-                                    )
-                    except Exception as e:
-                        log.error(f"Search pre-pass failed: {e}")
-
-                # Function calling loop (max 2 iterations)
-                max_iterations = 2
-                final_reply_text = "*I encountered an error.*"
-                
-                for iteration in range(max_iterations):
-                    # Use _generate_with_fallback which handles key rotation and tiered models
-                    response = await self._generate_with_fallback(contents=contents, config=config, is_main_chat=True)
-                    
-                    if not response:
-                        raise Exception("Failed to generate content after manual retry.")
-                    
-                    if hasattr(response, "function_calls") and response.function_calls:
-                        # Append the model's call to the history
-                        call_parts = []
-                        for call in response.function_calls:
-                            call_parts.append(types.Part.from_function_call(name=call.name, args=call.args))
-                        
-                        contents.append(types.Content(role="model", parts=call_parts))
-
-                        response_parts = []
-                        for call in response.function_calls:
-                            log.info(f"Gemini executed Function Call: {call.name} with {call.args}")
-                            
-                            if call.name == "update_user_profile":
-                                fact = call.args.get("fact", "")
-                                new_dossier = dossier_text.replace("\nWhat you know about this user:\n", "")
-                                if new_dossier:
-                                    new_dossier += "\n" + fact
-                                else:
-                                    new_dossier = fact
-                                    
-                                # Save to DB
-                                db.table("user_profiles").update({"dossier": new_dossier}).eq("user_id", message.author.id).execute()
-                                result_data = {"result": f"Successfully added '{fact}' to their persistent profile."}
-                                
-                            elif call.name == "search_discord_history":
-                                query = call.args.get("query", "").lower()
-                                deep_history = [m async for m in message.channel.history(limit=100, before=message)]
-                                found_messages = []
-                                for m in deep_history:
-                                    if query in m.content.lower():
-                                        found_messages.append(f"{m.author.display_name}: {m.content}")
-                                
-                                if found_messages:
-                                    res_str = "Found in logs:\n" + "\n".join(found_messages[:5])
-                                else:
-                                    res_str = "No matches found in the recent channel history."
-                                
-                                result_data = {"result": res_str}
-                            else:
-                                result_data = {"error": "Unknown function"}
-
-                            response_parts.append(types.Part.from_function_response(name=call.name, response=result_data))
-                        
-                        contents.append(types.Content(role="user", parts=response_parts))
-                        continue
-
-                    # If it didn't call a function, it just gave us text
-                    final_reply_text = response.text
-                    break
-                
-                # Discord has a 2000 character limit
-                if final_reply_text and len(final_reply_text) > 2000:
-                    final_reply_text = final_reply_text[:1996] + "..."
-
-                # Clear recent_flags from DB
-                if row.data and row.data[0].get("recent_flags", "").strip():
-                    db.table("user_profiles").update({"recent_flags": ""}).eq("user_id", message.author.id).execute()
-                
-                await message.reply(final_reply_text)
-                
-                # Log interaction for leaderboard
-                if message.guild:
-                    self._log_interaction(message.guild.id, message.author.id)
-                
         except Exception as e:
-            log.error(f"Error generating Gemini response: {e}")
+            log.error(f"Error in on_message AI flow: {e}", exc_info=True)
             await message.reply("*(I seem to be having trouble accessing my library archives right now. Please try again later!)*")
+
+    async def _get_user_context(self, author: discord.Member | discord.User) -> str:
+        """Fetch dossier & flags and return formatted system instruction prefix."""
+        dossier_text = ""
+        flags_text = ""
+        try:
+            db = get_db()
+            res = await asyncio.to_thread(lambda: db.table("user_profiles").select("dossier, recent_flags").eq("user_id", author.id).execute())
+            if res.data:
+                dossier = res.data[0].get("dossier", "").strip()
+                flags = res.data[0].get("recent_flags", "").strip()
+                if dossier: dossier_text = f"\nWhat you know about this user:\n{dossier}"
+                if flags: flags_text = f"\nRecent updates about this user:\n{flags}"
+        except Exception as e:
+            log.warning(f"Failed to fetch user context: {e}")
+
+        return (
+            f"{self.system_instruction}\n\n"
+            f"You are currently talking to: {author.display_name}."
+            f"{dossier_text}{flags_text}"
+        )
+
+    async def _prepare_chat_contents(self, message: discord.Message, clean_prompt: str) -> list:
+        """Coalesce history, attachments, and current message into Gemini contents list."""
+        contents = []
+        prefix = getattr(self.bot, "command_prefix", "!")
+        ping_pattern = f"<@!?{self.bot.user.id}>"
+
+        # 1. Fetch History
+        history = [m async for m in message.channel.history(limit=5, before=message)]
+        history.reverse()
+
+        # 2. Check for Reference
+        referenced_msg = None
+        if message.reference:
+            try:
+                referenced_msg = message.reference.resolved if isinstance(message.reference.resolved, discord.Message) else \
+                                 await message.channel.fetch_message(message.reference.message_id)
+            except: pass
+
+        for m in history:
+            if m.content.startswith(prefix) or (referenced_msg and m.id == referenced_msg.id):
+                continue
+            role = "model" if m.author.id == self.bot.user.id else "user"
+            text = re.sub(ping_pattern, "", m.content).strip()
+            if text:
+                prefix_name = f"{m.author.display_name}: " if role == "user" else ""
+                contents.append(types.Content(role=role, parts=[types.Part.from_text(text=f"{prefix_name}{text}")]))
+
+        # 3. Add Reference context
+        if referenced_msg:
+            ref_parts = [types.Part.from_text(text=f"[Replying to {referenced_msg.author.display_name}: \"{referenced_msg.content or '(no text)'}\"]")]
+            for attachment in referenced_msg.attachments:
+                if attachment.content_type and attachment.content_type.startswith("image/"):
+                    try:
+                        data = await attachment.read()
+                        ref_parts.append(types.Part.from_bytes(data=data, mime_type=attachment.content_type))
+                    except: pass
+            contents.append(types.Content(role="user", parts=ref_parts))
+
+        # 4. Add Current Message
+        current_parts = [types.Part.from_text(text=clean_prompt)]
+        for attachment in message.attachments:
+            if attachment.content_type and attachment.content_type.startswith("image/"):
+                try:
+                    data = await attachment.read()
+                    current_parts.append(types.Part.from_bytes(data=data, mime_type=attachment.content_type))
+                except: pass
+        contents.append(types.Content(role="user", parts=current_parts))
+        
+        return contents
+
+    async def _handle_web_search(self, message: discord.Message, clean_prompt: str, contents: list) -> str:
+        """Optionally perform web search and return context string."""
+        prompt_lower = clean_prompt.lower()
+        auto_search = (message.guild and message.guild.id in self.auto_web_guilds) or (message.author.id in self.auto_web_users)
+        manual_search = any(x in prompt_lower for x in ["search on web", "web:", "search:"])
+        
+        if not (auto_search or manual_search):
+            return ""
+
+        try:
+            recent_context = "\n".join([f"{c.role}: {p.text}" for c in contents[-3:] for p in c.parts if hasattr(p, 'text')])
+            query_maker = (
+                "You are a search query generator.\n"
+                f"LATEST MESSAGE: '{clean_prompt}'\n"
+                f"Recent Context: {recent_context}\n\n"
+                "TASK: Generate up to 2 DuckDuckGo queries for factual info. Output EXACTLY a JSON array of strings, or [] if no search is needed."
+            )
+            
+            resp = await self._generate_with_fallback(contents=query_maker)
+            if not resp or not resp.text: return ""
+
+            raw = resp.text.strip()
+            if "```" in raw: raw = raw.split("```")[1].replace("json", "").strip()
+            
+            try:
+                queries = json.loads(raw)
+                if queries:
+                    log.info(f"Generated Web Queries: {queries}")
+                    def fetch():
+                        results = []
+                        for q in queries[:2]:
+                            try:
+                                res = DDGS().text(q, max_results=3)
+                                if res:
+                                    snippets = "\n".join([f"- {r.get('title')}: {r.get('body')}" for r in res])
+                                    results.append(f"🔍 [Search: '{q}']:\n{snippets}")
+                                time.sleep(1)
+                            except: pass
+                        return "\n\n".join(results)
+
+                    search_results = await asyncio.to_thread(fetch)
+                    if search_results:
+                        return f"\n\n[Live Web Search Context]\nFacts gathered automatically:\n{search_results}\n"
+            except: pass
+        except Exception as e:
+            log.error(f"Search pre-pass failed: {e}")
+        return ""
+
+    async def _execute_model_flow(self, message: discord.Message, contents: list, config: types.GenerateContentConfig) -> str:
+        """Handle function calling loop and final response generation."""
+        db = get_db()
+        for _ in range(2): # max 2 iterations
+            resp = await self._generate_with_fallback(contents=contents, config=config, is_main_chat=True)
+            if not resp: return None
+            
+            if not (hasattr(resp, "function_calls") and resp.function_calls):
+                # Clear recent flags if we handled them
+                await asyncio.to_thread(lambda: db.table("user_profiles").update({"recent_flags": ""}).eq("user_id", message.author.id).execute())
+                return resp.text
+
+            # Handle Function Calls
+            call_parts = [types.Part.from_function_call(name=c.name, args=c.args) for c in resp.function_calls]
+            contents.append(types.Content(role="model", parts=call_parts))
+
+            response_parts = []
+            for call in resp.function_calls:
+                log.info(f"Executing Tool: {call.name}")
+                if call.name == "update_user_profile":
+                    fact = call.args.get("fact", "")
+                    # Fetch current dossier first
+                    curr = await asyncio.to_thread(lambda: db.table("user_profiles").select("dossier").eq("user_id", message.author.id).execute())
+                    new_d = (curr.data[0].get("dossier", "") + "\n" + fact).strip() if curr.data else fact
+                    await asyncio.to_thread(lambda: db.table("user_profiles").update({"dossier": new_d}).eq("user_id", message.author.id).execute())
+                    res_data = {"result": "Success"}
+                elif call.name == "search_discord_history":
+                    q = call.args.get("query", "").lower()
+                    found = [f"{m.author.display_name}: {m.content}" async for m in message.channel.history(limit=50) if q in m.content.lower()]
+                    res_data = {"result": "\n".join(found[:5]) if found else "No matches."}
+                else: res_data = {"error": "unknown"}
+                
+                response_parts.append(types.Part.from_function_response(name=call.name, response=res_data))
+            
+            contents.append(types.Content(role="user", parts=response_parts))
+        return None
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        # TEMPORARILY DISABLED: Gemini 3.1 Flash free tier has a strict 15 RPM limit.
-        # AI reactions consume too many quotas and crash the bot's core functionality.
+        # TEMPORARILY DISABLED: prevents API quota exhaustion and memory leak
         return
 
         # Fetch the channel and message

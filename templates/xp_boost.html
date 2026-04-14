@@ -1,0 +1,130 @@
+{% extends "base_admin.html" %}
+
+{% block page_title %}XP Role Multipliers{% endblock %}
+
+{% block header_actions %}
+<button onclick="document.getElementById('add_boost_modal').style.display='flex'">
+    <i class="fas fa-plus"></i> Add New Booster
+</button>
+{% endblock %}
+
+{% block extra_style %}
+<style>
+    .boost-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+    .boost-card { 
+        background: var(--surface); border: 1px solid var(--surface-border); 
+        border-radius: 12px; padding: 1.5rem; position: relative;
+        transition: transform 0.2s, border-color 0.2s;
+    }
+    .boost-card:hover { transform: translateY(-4px); border-color: var(--primary); }
+    .boost-card.disabled { opacity: 0.6; grayscale: 0.5; }
+    
+    .boost-val { font-size: 2.5rem; font-weight: 800; color: var(--primary); margin: 0.5rem 0; }
+    .boost-label { font-size: 1.1rem; font-weight: 600; color: #fff; }
+    .boost-id { font-family: monospace; font-size: 0.8rem; color: var(--text-muted); }
+    
+    .card-footer { 
+        margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--surface-border);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    
+    /* Modal Styles */
+    .modal {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); backdrop-filter: blur(4px);
+        display: none; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal-content {
+        background: var(--surface); border: 1px solid var(--surface-border);
+        width: 100%; max-width: 450px; border-radius: 16px; padding: 2rem;
+    }
+    
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="boost-grid">
+    {% for boost in boosts %}
+    <div class="boost-card {% if not boost.enabled %}disabled{% endif %}" id="boost-{{ boost.role_id }}">
+        <div class="boost-label">{{ boost.label }}</div>
+        <div class="boost-val">{{ boost.multiplier }}x</div>
+        <div class="boost-id">Role ID: {{ boost.role_id }}</div>
+        
+        <div class="card-footer">
+            <label class="switch">
+                <input type="checkbox" {% if boost.enabled %}checked{% endif %} 
+                       onchange="toggleBoost('{{ boost.role_id }}', this.checked)">
+                <span class="slider"></span>
+            </label>
+            <button class="danger" onclick="deleteBoost('{{ boost.role_id }}')" style="padding: 0.5rem 1rem;">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="add_boost_modal" class="modal">
+    <div class="modal-content">
+        <h3 style="margin-top: 0;">Configure New Multiplier</h3>
+        <form id="add_boost_form" onsubmit="submitBoost(event)">
+            <label>Role ID</label>
+            <input type="text" name="role_id" placeholder="e.g. 1492319450899157094" required>
+            
+            <label>Multiplier (e.g. 1.10 for 10%)</label>
+            <input type="number" name="multiplier" step="0.01" value="1.10" required>
+            
+            <label>Label</label>
+            <input type="text" name="label" placeholder="e.g. Library Member" required>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                <button type="button" class="secondary" style="flex: 1;" onclick="document.getElementById('add_boost_modal').style.display='none'">Cancel</button>
+                <button type="submit" style="flex: 2;">Save Multiplier</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    async function submitBoost(e) {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        
+        await withLoading(btn, async () => {
+            try {
+                await API.post('/admin/api/xp/boosts', data);
+                location.reload();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    }
+
+    async function toggleBoost(roleId, enabled) {
+        try {
+            await API.post('/admin/api/xp/boosts/toggle', { role_id: roleId, enabled });
+            const card = document.getElementById(`boost-${roleId}`);
+            if (enabled) card.classList.remove('disabled');
+            else card.classList.add('disabled');
+            showToast('Multiplier state updated');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    async function deleteBoost(roleId) {
+        if (!confirm('Permanently remove this XP booster?')) return;
+        try {
+            await API.delete(`/admin/api/xp/boosts/${roleId}`);
+            location.reload();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+</script>
+{% endblock %}

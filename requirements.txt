@@ -3,4 +3,8 @@ python-dotenv>=1.0.0
 supabase>=2.0.0
 google-genai>=0.1.2
 aiohttp>=3.8.0
+aiohttp-jinja2
+aiohttp-session
+cryptography
 ddgs
+bcrypt

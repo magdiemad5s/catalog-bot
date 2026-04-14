@@ -118,7 +118,7 @@ class Giveaway(commands.Cog, name="Giveaway"):
                   .eq("user_id", target.id)
                   .execute()
             )
-            has_card = bool(res.data) and res.data[0].get("has_library_card") is True
+            has_card = bool(res.data and res.data[0].get("has_library_card"))
         except Exception as e:
             log.error(f"DB check failed for giverole on {target.id}: {e}")
             return await ctx.reply(

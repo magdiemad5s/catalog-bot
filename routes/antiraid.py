@@ -1,0 +1,59 @@
+from aiohttp import web
+import aiohttp_jinja2
+from db import get_db
+
+antiraid_routes = web.RouteTableDef()
+
+@antiraid_routes.get("/admin/antiraid")
+@aiohttp_jinja2.template("antiraid.html")
+async def antiraid_page(request):
+    bot = request.app['bot']
+    db = get_db()
+    
+    # We only handle one guild for now as per this bot's usual setup
+    # but we search for the config or create a default
+    guild_id = bot.guilds[0].id if bot.guilds else 0
+    
+    res = db.table("anti_raid_config").select("*").eq("guild_id", guild_id).execute()
+    config = res.data[0] if res.data else {
+        "guild_id": guild_id,
+        "enabled": False,
+        "account_age_min_days": 7,
+        "join_rate_count": 5,
+        "join_rate_window_seconds": 10,
+        "penalty_action": "kick",
+        "mute_duration_minutes": 60,
+        "alert_channel_id": None,
+        "quarantine_role_id": None
+    }
+    
+    return {
+        "active_page": "antiraid",
+        "config": config,
+        "channels": [{"id": c.id, "name": c.name} for g in bot.guilds for c in g.text_channels],
+        "roles": [{"id": r.id, "name": r.name} for g in bot.guilds for r in g.roles if not r.is_default()]
+    }
+
+@antiraid_routes.post("/admin/api/antiraid")
+async def update_antiraid(request):
+    data = await request.json()
+    db = get_db()
+    
+    try:
+        # Cast types correctly
+        payload = {
+            "guild_id": int(data.get("guild_id")),
+            "enabled": bool(data.get("enabled")),
+            "account_age_min_days": int(data.get("account_age_min_days", 7)),
+            "join_rate_count": int(data.get("join_rate_count", 5)),
+            "join_rate_window_seconds": int(data.get("join_rate_window_seconds", 10)),
+            "penalty_action": data.get("penalty_action", "kick"),
+            "mute_duration_minutes": int(data.get("mute_duration_minutes", 60)),
+            "alert_channel_id": int(data.get("alert_channel_id")) if data.get("alert_channel_id") else None,
+            "quarantine_role_id": int(data.get("quarantine_role_id")) if data.get("quarantine_role_id") else None
+        }
+        
+        db.table("anti_raid_config").upsert(payload).execute()
+        return web.json_response({"success": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400)

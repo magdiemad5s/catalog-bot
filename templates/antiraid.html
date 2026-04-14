@@ -1,0 +1,156 @@
+{% extends "base_admin.html" %}
+
+{% block page_title %}Anti-Raid Perimeter{% endblock %}
+
+{% block extra_style %}
+<style>
+    .config-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; }
+    
+    .status-card {
+        display: flex; justify-content: space-between; align-items: center;
+        background: rgba(99, 102, 241, 0.05); border: 1px dashed var(--primary);
+    }
+    
+    .slider-container { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+    .slider-label { flex: 1; }
+    .slider-val { width: 50px; text-align: right; font-weight: 700; color: var(--primary); }
+    
+    input[type=range] {
+        flex: 2; height: 6px; background: #27272a; border-radius: 5px;
+        appearance: none; outline: none; margin: 0;
+    }
+    input[type=range]::-webkit-slider-thumb {
+        appearance: none; width: 18px; height: 18px; border-radius: 50%;
+        background: var(--primary); cursor: pointer; transition: .2s ease-in-out;
+    }
+    
+    .raid-reason { font-size: 0.8rem; padding: 0.25rem 0.5rem; border-radius: 4px; background: rgba(255,255,255,0.05); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="config-grid">
+    <div class="main-settings">
+        <form id="antiraid_form" onsubmit="saveAntiRaid(event)">
+            <input type="hidden" name="guild_id" value="{{ config.guild_id }}">
+            
+            <div class="card status-card">
+                <div>
+                    <h3 style="margin: 0;">System Active</h3>
+                    <p style="margin: 0.25rem 0 0 0; font-size: 0.9rem; color: var(--text-muted);">Toggle the automated join surveillance system</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" name="enabled" {% if config.enabled %}checked{% endif %}>
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="card">
+                <h3>Detection Thresholds</h3>
+                
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <label style="margin: 0;">Account Age (Days)</label>
+                        <small style="color: var(--text-muted)">Flag accounts younger than this</small>
+                    </div>
+                    <input type="range" name="account_age_min_days" min="0" max="30" value="{{ config.account_age_min_days }}" oninput="this.nextElementSibling.innerText = this.value">
+                    <div class="slider-val">{{ config.account_age_min_days }}</div>
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <label style="margin: 0;">Join Count</label>
+                        <small style="color: var(--text-muted)">Number of joins to trigger rate limit</small>
+                    </div>
+                    <input type="range" name="join_rate_count" min="2" max="20" value="{{ config.join_rate_count }}" oninput="this.nextElementSibling.innerText = this.value">
+                    <div class="slider-val">{{ config.join_rate_count }}</div>
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <label style="margin: 0;">Time Window (Seconds)</label>
+                        <small style="color: var(--text-muted)">Scanning period for the join count</small>
+                    </div>
+                    <input type="range" name="join_rate_window_seconds" min="1" max="60" value="{{ config.join_rate_window_seconds }}" oninput="this.nextElementSibling.innerText = this.value">
+                    <div class="slider-val">{{ config.join_rate_window_seconds }}</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Automated Response</h3>
+                
+                <label>Penalty Action</label>
+                <select name="penalty_action" onchange="toggleMuteDuration(this.value)">
+                    <option value="kick" {% if config.penalty_action == 'kick' %}selected{% endif %}>Kick from Server</option>
+                    <option value="ban" {% if config.penalty_action == 'ban' %}selected{% endif %}>Permanent Ban</option>
+                    <option value="mute" {% if config.penalty_action == 'mute' %}selected{% endif %}>Timeout (Mute)</option>
+                    <option value="quarantine" {% if config.penalty_action == 'quarantine' %}selected{% endif %}>Assign Quarantine Role</option>
+                </select>
+
+                <div id="mute_duration_div" {% if config.penalty_action != 'mute' %}style="display: none;"{% endif %}>
+                    <label>Mute Duration (Minutes)</label>
+                    <input type="number" name="mute_duration_minutes" value="{{ config.mute_duration_minutes }}">
+                </div>
+
+                <div id="quarantine_role_div" {% if config.penalty_action != 'quarantine' %}style="display: none;"{% endif %}>
+                    <label>Quarantine Role</label>
+                    <select name="quarantine_role_id">
+                        <option value="">-- Select Role --</option>
+                        {% for role in roles %}
+                        <option value="{{ role.id }}" {% if config.quarantine_role_id == role.id %}selected{% endif %}>{{ role.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <label style="margin-top: 1rem;">Logging / Alert Channel</label>
+                <select name="alert_channel_id">
+                    <option value="">-- No Alerts --</option>
+                    {% for channel in channels %}
+                    <option value="{{ channel.id }}" {% if config.alert_channel_id == channel.id %}selected{% endif %}>#{{ channel.name }}</option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit" style="margin-top: 1rem; width: 100%; justify-content: center;">
+                    <i class="fas fa-save"></i> Save Security Config
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="recent-events">
+        <div class="card">
+            <h3 style="margin-top: 0;">Live Intelligence</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">Real-time join activity and filters will appear here soon.</p>
+            <div style="border: 1px dashed var(--surface-border); height: 200px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem;">
+                Monitoring Active...
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    function toggleMuteDuration(val) {
+        document.getElementById('mute_duration_div').style.display = (val === 'mute' ? 'block' : 'none');
+        document.getElementById('quarantine_role_div').style.display = (val === 'quarantine' ? 'block' : 'none');
+    }
+
+    async function saveAntiRaid(e) {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        data.enabled = e.target.enabled.checked;
+        
+        await withLoading(btn, async () => {
+            try {
+                await API.post('/admin/api/antiraid', data);
+                showToast('Anti-Raid perimeter updated!');
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    }
+</script>
+{% endblock %}

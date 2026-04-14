@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Catalog Bot{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #09090b; --surface: #18181b; --surface-border: #27272a;
+            --primary: #6366f1; --primary-hover: #4f46e5;
+            --text: #f4f4f5; --text-muted: #a1a1aa;
+            --danger: #ef4444;
+        }
+        body {
+            font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
+            margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 100vh;
+            align-items: center; justify-content: center;
+        }
+        .container { max-width: 1000px; width: 100%; padding: 2rem; box-sizing: border-box; }
+    </style>
+    {% block extra_style %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

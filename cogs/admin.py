@@ -10,6 +10,7 @@ import logging
 import discord
 from discord.ext import commands
 
+import bcrypt
 from utils.embeds import error_embed
 
 log = logging.getLogger(__name__)
@@ -19,6 +20,42 @@ class Admin(commands.Cog, name="Admin"):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    @commands.hybrid_command(name="seedadmin", description="Seed a new admin account for the web panel.")
+    @commands.is_owner()
+    async def seedadmin(self, ctx: commands.Context, username: str, password: str):
+        """Securely hashes and stores an admin credential into the database.
+        
+        Recommended to use as a slash command or in a private channel.
+        """
+        # Delete message if it's a prefix command to protect the password
+        if ctx.interaction is None:
+            try:
+                await ctx.message.delete()
+            except discord.Forbidden:
+                pass
+                
+        # Hash password
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+        
+        try:
+            from db.client import get_db
+            db = get_db()
+            # We use asyncio.to_thread because supabase-py is synchronous
+            import asyncio
+            await asyncio.to_thread(
+                lambda: db.table("admin_users").upsert({
+                    "username": username,
+                    "password_hash": hashed
+                }).execute()
+            )
+            
+            await ctx.reply(f"✅ Admin account '**{username}**' seeded successfully.", ephemeral=True)
+            log.info(f"Admin account '{username}' seeded by {ctx.author}.")
+        except Exception as e:
+            await ctx.reply(f"❌ Database error: {e}", ephemeral=True)
+            log.error(f"Failed to seed admin: {e}")
 
     @commands.hybrid_command(name="update", description="Pulls latest code from GitHub and restarts the bot cleanly.")
     @commands.has_permissions(administrator=True)

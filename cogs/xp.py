@@ -10,6 +10,7 @@ import random
 from datetime import datetime, timedelta, timezone
 
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 
 from db import get_db
@@ -129,6 +130,18 @@ class XP(commands.Cog, name="XP"):
             if streak_days > 1:
                 bonus_multiplier = 1.2
         
+        # Determine role boosts
+        try:
+            res_boosts = db.table("xp_role_boosts").select("*").eq("enabled", True).execute()
+            if res_boosts.data:
+                for boost in res_boosts.data:
+                    # Check if user has the role
+                    if any(r.id == boost["role_id"] for r in member.roles):
+                        # Multiplicative stack as per plan
+                        bonus_multiplier *= boost["multiplier"]
+        except Exception as e:
+            log.error(f"Failed to fetch XP boosts: {e}")
+
         final_xp_amount = int(amount * bonus_multiplier)
         
         # 2. Upsert profile
@@ -370,6 +383,48 @@ class XP(commands.Cog, name="XP"):
                         continue
                         
                     await self._award_xp(None, member, 10, is_voice=True)
+
+    @app_commands.command(name="xpboosts", description="Show your current active XP boosts")
+    async def xp_boosts(self, interaction: discord.Interaction):
+        """Show the user's active XP role boosts."""
+        member = interaction.user
+        if not interaction.guild:
+            await interaction.response.send_message("This command only works in servers.", ephemeral=True)
+            return
+
+        db = get_db()
+        res = db.table("xp_role_boosts").select("*").eq("enabled", True).execute()
+        boosts = res.data if res.data else []
+
+        active_boosts = []
+        total_multiplier = 1.0
+        
+        # Check streak
+        profile_res = db.table("xp_profiles").select("streak_days").eq("guild_id", interaction.guild_id).eq("user_id", member.id).execute()
+        if profile_res.data and profile_res.data[0].get("streak_days", 0) > 1:
+            active_boosts.append(f"🔥 **Streak Bonus**: 1.20x")
+            total_multiplier *= 1.20
+
+        for boost in boosts:
+            role_id = boost["role_id"]
+            if any(r.id == role_id for r in member.roles):
+                active_boosts.append(f"✨ **{boost['label']}**: {boost['multiplier']:.2f}x")
+                total_multiplier *= boost["multiplier"]
+
+        embed = discord.Embed(
+            title="XP Boost Status",
+            color=discord.Color.gold(),
+            description="Here are your currently active XP multipliers:"
+        )
+        
+        if active_boosts:
+            embed.add_field(name="Active Boosts", value="\n".join(active_boosts), inline=False)
+            embed.add_field(name="Total Multiplier", value=f"**{total_multiplier:.2f}x**", inline=False)
+        else:
+            embed.add_field(name="Active Boosts", value="None", inline=False)
+            embed.add_field(name="Total Multiplier", value="**1.00x**", inline=False)
+
+        await interaction.response.send_message(embed=embed)
 
     @_voice_xp_task.before_loop
     async def before_voice_task(self):

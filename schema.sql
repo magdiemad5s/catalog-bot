@@ -127,3 +127,92 @@ create table if not exists ai_interactions (
     interaction_count int not null default 1,
     primary key (guild_id, user_id)
 );
+
+-- ── XP Boosts ────────────────────────────────────────────────────────────────
+create table if not exists xp_role_boosts (
+    role_id     bigint  primary key,
+    multiplier  float   not null default 1.1,
+    label       text    not null,
+    enabled     boolean not null default true
+);
+
+-- Default boosters
+insert into xp_role_boosts (role_id, multiplier, label, enabled)
+values (1492319450899157094, 1.10, 'Library Member', true)
+on conflict (role_id) do nothing;
+
+insert into xp_role_boosts (role_id, multiplier, label, enabled)
+values (1482721503597297775, 1.10, 'Golden Leaf', true)
+on conflict (role_id) do nothing;
+
+-- ── Anti-Raid ────────────────────────────────────────────────────────────────
+create table if not exists anti_raid_config (
+    guild_id                bigint  primary key,
+    enabled                 boolean not null default false,
+    account_age_min_days    int     not null default 7,
+    join_rate_count         int     not null default 5,
+    join_rate_window_seconds int    not null default 10,
+    penalty_action          text    not null default 'kick', -- 'kick', 'mute', 'ban', 'quarantine'
+    mute_duration_minutes   int     not null default 60,
+    alert_channel_id        bigint,
+    quarantine_role_id      bigint
+);
+
+-- ── Word Filter ──────────────────────────────────────────────────────────────
+create table if not exists filter_profiles (
+    id          bigserial   primary key,
+    guild_id    bigint      not null,
+    name        text        not null,
+    word_list   jsonb       not null default '[]',
+    enabled     boolean     not null default true,
+    created_at  timestamptz not null default now()
+);
+
+create table if not exists filter_config (
+    guild_id            bigint  primary key,
+    enabled             boolean not null default false,
+    active_profile_id   bigint  references filter_profiles(id),
+    threshold           int     not null default 3,
+    mod_channel_id      bigint
+);
+
+create table if not exists filter_log (
+    id              bigserial    primary key,
+    guild_id        bigint       not null,
+    user_id         bigint       not null,
+    channel_id      bigint       not null,
+    matched_word    text         not null,
+    message_content text         not null,
+    action_taken    text         not null,
+    created_at      timestamptz  not null default now()
+);
+
+-- ── Minigames ────────────────────────────────────────────────────────────────
+create table if not exists minesweeper_sessions (
+    session_id   uuid        primary key default gen_random_uuid(),
+    user_id      bigint      not null,
+    difficulty   text        not null,
+    score        int         not null default 0,
+    won          boolean     not null default false,
+    started_at   timestamptz not null default now(),
+    completed_at timestamptz
+);
+
+create table if not exists roulette_sessions (
+    session_id      uuid        primary key default gen_random_uuid(),
+    host_user_id    bigint      not null,
+    players         jsonb       not null default '[]',
+    xp_pool         int         not null default 0,
+    winner_user_ids jsonb       not null default '[]',
+    xp_won_each     int         not null default 0,
+    started_at      timestamptz not null default now(),
+    ended_at        timestamptz
+);
+
+-- ── Admin Users (Web Panel Auth) ──────────────────────────────────────────────
+create table if not exists admin_users (
+    id            bigserial    primary key,
+    username      text         unique not null,
+    password_hash text         not null,
+    created_at    timestamptz  not null default now()
+);

@@ -6,6 +6,7 @@ Includes /rank, /leaderboard, /editrank, and more.
 from __future__ import annotations
 
 import logging
+import asyncio
 from typing import Optional
 
 import discord
@@ -26,15 +27,17 @@ class Levels(commands.Cog, name="Levels"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    def _get_rank_info(self, guild_id: int, level: int):
+    async def _get_rank_info(self, guild_id: int, level: int):
         """Fetch rank label and emoji for a given level."""
         try:
             db = get_db()
-            res = db.table("rank_tiers").select("*").eq("guild_id", guild_id).lte("level_min", level).gte("level_max", level).execute()
+            res = await asyncio.to_thread(
+                lambda: db.table("rank_tiers").select("*").eq("guild_id", guild_id).lte("level_min", level).gte("level_max", level).execute()
+            )
             if res.data:
                 return res.data[0]
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"Failed to fetch rank info for level {level} in guild {guild_id}: {e}")
         return {"label": "Lurker", "emoji": "👁️"}
 
     # ── User Commands ──────────────────────────────────────────────────────────
@@ -56,20 +59,26 @@ class Levels(commands.Cog, name="Levels"):
             db = get_db()
             
             # Fetch rank profile
-            res = db.table("xp_profiles").select("*").eq("guild_id", ctx.guild.id).eq("user_id", target.id).execute()
+            res = await asyncio.to_thread(
+                lambda: db.table("xp_profiles").select("*").eq("guild_id", ctx.guild.id).eq("user_id", target.id).execute()
+            )
             profile = res.data[0] if res.data else {"xp": 0, "level": 0, "streak_days": 0}
             
             # Fetch leaderboard position efficiently: count users with more XP
             xp = profile["xp"]
-            above_res = db.table("xp_profiles").select("user_id", count="exact").eq("guild_id", ctx.guild.id).gt("xp", xp).execute()
+            above_res = await asyncio.to_thread(
+                lambda: db.table("xp_profiles").select("user_id", count="exact").eq("guild_id", ctx.guild.id).gt("xp", xp).execute()
+            )
             rank_pos = (above_res.count or 0) + 1 if res.data else 0
 
             # Fetch badges
-            badges_res = db.table("user_badges").select("badge_key").eq("guild_id", ctx.guild.id).eq("user_id", target.id).execute()
+            badges_res = await asyncio.to_thread(
+                lambda: db.table("user_badges").select("badge_key").eq("guild_id", ctx.guild.id).eq("user_id", target.id).execute()
+            )
             earned_badges = [BADGE_KEYS.get(b["badge_key"], b["badge_key"]) for b in (badges_res.data or [])]
             
             # Fetch rank tier info
-            rank_info = self._get_rank_info(ctx.guild.id, profile["level"])
+            rank_info = await self._get_rank_info(ctx.guild.id, profile["level"])
             
             # Math
             xp = profile["xp"]
@@ -118,7 +127,9 @@ class Levels(commands.Cog, name="Levels"):
         """
         try:
             db = get_db()
-            res = db.table("xp_profiles").select("user_id, xp, level").eq("guild_id", ctx.guild.id).order("xp", desc=True).limit(10).execute()
+            res = await asyncio.to_thread(
+                lambda: db.table("xp_profiles").select("user_id, xp, level").eq("guild_id", ctx.guild.id).order("xp", desc=True).limit(10).execute()
+            )
             
             if not res.data:
                 return await ctx.reply("Nobody has earned any XP yet!")
@@ -171,7 +182,9 @@ class Levels(commands.Cog, name="Levels"):
             
         try:
             db = get_db()
-            res = db.table("xp_profiles").select("xp").eq("guild_id", ctx.guild.id).eq("user_id", member.id).execute()
+            res = await asyncio.to_thread(
+                lambda: db.table("xp_profiles").select("xp").eq("guild_id", ctx.guild.id).eq("user_id", member.id).execute()
+            )
             current_xp = res.data[0]["xp"] if res.data else 0
             
             new_xp = current_xp
@@ -188,9 +201,13 @@ class Levels(commands.Cog, name="Levels"):
                 "level": new_level
             }
             if res.data:
-                db.table("xp_profiles").update(data).eq("guild_id", ctx.guild.id).eq("user_id", member.id).execute()
+                await asyncio.to_thread(
+                    lambda: db.table("xp_profiles").update(data).eq("guild_id", ctx.guild.id).eq("user_id", member.id).execute()
+                )
             else:
-                db.table("xp_profiles").insert(data).execute()
+                await asyncio.to_thread(
+                    lambda: db.table("xp_profiles").insert(data).execute()
+                )
                 
             old_level = xp_to_level(current_xp)
             if new_level != old_level:
@@ -225,13 +242,15 @@ class Levels(commands.Cog, name="Levels"):
         """
         try:
             db = get_db()
-            db.table("rank_tiers").upsert({
-                "guild_id": ctx.guild.id,
-                "level_min": level_min,
-                "level_max": level_max,
-                "label": name,
-                "emoji": emoji
-            }).execute()
+            await asyncio.to_thread(
+                lambda: db.table("rank_tiers").upsert({
+                    "guild_id": ctx.guild.id,
+                    "level_min": level_min,
+                    "level_max": level_max,
+                    "label": name,
+                    "emoji": emoji
+                }).execute()
+            )
             
             await ctx.reply(embed=success_embed("Rank Tier Updated", f"Levels {level_min}–{level_max} are now known as:\n**{emoji} {name}**"))
         except Exception as e:
@@ -280,11 +299,13 @@ class Levels(commands.Cog, name="Levels"):
         """
         try:
             db = get_db()
-            db.table("badge_roles").upsert({
-                "guild_id": ctx.guild.id,
-                "badge_key": badge.value,
-                "role_id": role.id
-            }).execute()
+            await asyncio.to_thread(
+                lambda: db.table("badge_roles").upsert({
+                    "guild_id": ctx.guild.id,
+                    "badge_key": badge.value,
+                    "role_id": role.id
+                }).execute()
+            )
             
             await ctx.reply(embed=success_embed("Badge Role Saved", f"The **{badge.name}** badge will now grant {role.mention}."))
         except Exception:

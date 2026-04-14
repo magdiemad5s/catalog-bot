@@ -70,19 +70,23 @@ class LibraryBot(commands.Bot):
 
     async def _load_cogs(self):
         """Auto-loads every *.py file inside the cogs/ directory."""
-        cog_dir = os.path.join(os.path.dirname(__file__), self.config.cog_dir)
-        if not os.path.isdir(cog_dir):
+        from pathlib import Path
+        cog_dir = Path(__file__).parent / self.config.cog_dir
+        
+        if not cog_dir.is_dir():
             log.warning("No '%s/' directory found — skipping cog loading.", self.config.cog_dir)
             return
 
-        for filename in sorted(os.listdir(cog_dir)):
-            if filename.endswith(".py") and not filename.startswith("_"):
-                ext = f"{self.config.cog_dir}.{filename[:-3]}"
-                try:
-                    await self.load_extension(ext)
-                    log.info("Loaded cog: %s", ext)
-                except Exception as exc:
-                    log.error("Failed to load cog %s: %s", ext, exc, exc_info=True)
+        for path in sorted(cog_dir.glob("*.py")):
+            if path.name.startswith("_"):
+                continue
+                
+            ext = f"{self.config.cog_dir}.{path.stem}"
+            try:
+                await self.load_extension(ext)
+                log.info("Loaded cog: %s", ext)
+            except Exception as exc:
+                log.error("Failed to load cog %s: %s", ext, exc, exc_info=True)
 
     # ── Events ─────────────────────────────────────────────────────────────────
 
