@@ -130,15 +130,15 @@ class LibraryBot(commands.Bot):
         if isinstance(error, commands.CommandNotFound):
             return
         if isinstance(error, commands.MissingPermissions):
-            await ctx.reply(embed=error_embed("You don't have permission to use this command."))
+            await ctx.send(embed=error_embed("You don't have permission to use this command."))
         elif isinstance(error, commands.BotMissingPermissions):
-            await ctx.reply(embed=error_embed("I'm missing the permissions needed to do that."))
+            await ctx.send(embed=error_embed("I'm missing the permissions needed to do that."))
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.reply(embed=error_embed(f"Missing argument: `{error.param.name}`"))
+            await ctx.send(embed=error_embed(f"Missing argument: `{error.param.name}`"))
         elif isinstance(error, commands.BadArgument):
-            await ctx.reply(embed=error_embed("Invalid argument provided."))
+            await ctx.send(embed=error_embed("Invalid argument provided."))
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.reply(embed=error_embed(f"Slow down! Try again in **{error.retry_after:.1f}s**."))
+            await ctx.send(embed=error_embed(f"Slow down! Try again in **{error.retry_after:.1f}s**."))
         else:
             log.error("Unhandled error in %s: %s", ctx.command, error, exc_info=True)
-            await ctx.reply(embed=error_embed("Something went wrong. Please try again."))
+            await ctx.send(embed=error_embed("Something went wrong. Please try again."))

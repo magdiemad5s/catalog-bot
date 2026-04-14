@@ -187,43 +187,46 @@ class Games(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="minesweeper", description="Start a game of Minesweeper")
+    @commands.hybrid_command(name="minesweeper", description="Start a game of Minesweeper")
     @app_commands.choices(difficulty=[
         app_commands.Choice(name="Easy (5x5, 5 mines)", value="easy"),
         app_commands.Choice(name="Medium (7x7, 12 mines)", value="medium"),
         app_commands.Choice(name="Hard (9x9, 20 mines)", value="hard")
     ])
-    async def minesweeper(self, interaction: discord.Interaction, difficulty: str = "easy"):
+    async def minesweeper(self, ctx: commands.Context, difficulty: str = "easy"):
         configs = {
             "easy": (5, 5),
             "medium": (7, 12),
             "hard": (9, 20)
         }
         size, mines = configs[difficulty]
-        view = MinesweeperView(interaction.user.id, size, mines, difficulty)
-        await interaction.response.send_message(f"Minesweeper - {difficulty.capitalize()}", view=view)
+        view = MinesweeperView(ctx.author.id, size, mines, difficulty)
+        await ctx.send(f"Minesweeper - {difficulty.capitalize()}", view=view)
 
-    @app_commands.command(name="roulette", description="Start a Russian Roulette lobby")
-    async def roulette(self, interaction: discord.Interaction, bet_xp: int = 50):
-        if bet_xp < 0: return await interaction.response.send_message("Invalid bet.", ephemeral=True)
+    @commands.hybrid_command(name="roulette", description="Start a Russian Roulette lobby")
+    async def roulette(self, ctx: commands.Context, bet_xp: int = 50):
+        if bet_xp < 0: return await ctx.send("Invalid bet.", ephemeral=True)
         
-        view = RouletteJoinView(interaction.user.id, bet_xp)
+        view = RouletteJoinView(ctx.author.id, bet_xp)
         embed = discord.Embed(
             title="Russian Roulette Lobby",
-            description=f"Host: {interaction.user.mention}\nBet: **{bet_xp} XP**\n\nClick below to join! Game starts in 60s.",
+            description=f"Host: {ctx.author.mention}\nBet: **{bet_xp} XP**\n\nClick below to join! Game starts in 60s.",
             color=discord.Color.dark_red()
         )
-        await interaction.response.send_message(embed=embed, view=view)
+        await ctx.send(embed=embed, view=view)
         
         await view.wait()
         
         if len(view.players) < 2:
-            await interaction.edit_original_response(content="Not enough players joined.", embed=None, view=None)
+            if ctx.interaction:
+                await ctx.interaction.edit_original_response(content="Not enough players joined.", embed=None, view=None)
+            else:
+                await ctx.send("Not enough players joined.")
             return
 
-        await self._run_roulette(interaction, view.players, bet_xp)
+        await self._run_roulette(ctx, view.players, bet_xp)
 
-    async def _run_roulette(self, interaction: discord.Interaction, player_ids: set, bet: int):
+    async def _run_roulette(self, ctx: commands.Context, player_ids: set, bet: int):
         players = []
         for pid in player_ids:
             user = self.bot.get_user(pid) or await self.bot.fetch_user(pid)
@@ -248,21 +251,21 @@ class Games(commands.Cog):
         try:
              db.table("roulette_sessions").insert({
                  "session_id": session_id,
-                 "host_user_id": interaction.user.id,
+                 "host_user_id": ctx.author.id,
                  "players": [p.id for p in players],
                  "xp_pool": xp_pool
              }).execute()
         except: pass
 
         while len(survivors) > 1:
-            await interaction.followup.send(f"**Round {round_num}**: The cylinder spins...")
+            await ctx.send(f"**Round {round_num}**: The cylinder spins...")
             await asyncio.sleep(2)
             
             # One person is out
             loser = random.choice(survivors)
             survivors.remove(loser)
             
-            await interaction.followup.send(f"💥 **BANG!** {loser.mention} is out.")
+            await ctx.send(f"💥 **BANG!** {loser.mention} is out.")
             await asyncio.sleep(1.5)
             round_num += 1
 
@@ -287,14 +290,14 @@ class Games(commands.Cog):
             description=f"🏆 **{winner.mention}** is the sole survivor!\nThey won the pot of **{xp_pool} XP**.",
             color=discord.Color.gold()
         )
-        await interaction.followup.send(embed=embed)
+        await ctx.send(embed=embed)
 
-    @app_commands.command(name="topgames", description="View game leaderboards")
+    @commands.hybrid_command(name="topgames", description="View game leaderboards")
     @app_commands.choices(game=[
         app_commands.Choice(name="Minesweeper", value="minesweeper"),
         app_commands.Choice(name="Russian Roulette", value="roulette")
     ])
-    async def topgames(self, interaction: discord.Interaction, game: str):
+    async def topgames(self, ctx: commands.Context, game: str):
         db = get_db()
         embed = discord.Embed(title=f"{game.capitalize()} Leaderboard", color=discord.Color.blue())
         
@@ -321,7 +324,7 @@ class Games(commands.Cog):
                 lines.append(f"{i}. **{user}**: {row['score']} pts/XP")
             embed.description = "\n".join(lines)
             
-        await interaction.response.send_message(embed=embed)
+        await ctx.send(embed=embed)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Games(bot))

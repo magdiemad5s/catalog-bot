@@ -48,13 +48,13 @@ class Admin(commands.Cog, name="Admin"):
                 lambda: db.table("admin_users").upsert({
                     "username": username,
                     "password_hash": hashed
-                }).execute()
+                }, on_conflict="username").execute()
             )
             
-            await ctx.reply(f"✅ Admin account '**{username}**' seeded successfully.", ephemeral=True)
+            await ctx.send(f"✅ Admin account '**{username}**' seeded successfully.", ephemeral=True)
             log.info(f"Admin account '{username}' seeded by {ctx.author}.")
         except Exception as e:
-            await ctx.reply(f"❌ Database error: {e}", ephemeral=True)
+            await ctx.send(f"❌ Database error: {e}", ephemeral=True)
             log.error(f"Failed to seed admin: {e}")
 
     @commands.hybrid_command(name="update", description="Pulls latest code from GitHub and restarts the bot cleanly.")

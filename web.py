@@ -79,6 +79,8 @@ async def login_handler(request):
                 session['user'] = username
                 log.info(f"Admin '{username}' logged in successfully.")
                 raise web.HTTPFound('/admin')
+    except web.HTTPException:
+        raise
     except Exception as e:
         log.error(f"Login error: {e}")
         return {"error": "A system error occurred. Please check logs."}
