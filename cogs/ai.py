@@ -158,9 +158,24 @@ class AI(commands.Cog, name="AI"):
           gemini-2.5-flash → gemini-2.5-flash-lite →
           gemma-4-31b-it (config stripped) → gemma-4-26b-a4b-it (config stripped)
         """
-        # --- Model configuration ---
-        primary_model   = 'gemini-3.1-flash-lite-preview' if is_main_chat else 'gemini-3-flash-preview'
-        secondary_model = 'gemini-3-flash-preview'        if is_main_chat else None  # chat-path only
+        # --- Model configuration & Sticky State ---
+        intended_primary = 'gemini-3.1-flash-lite-preview' if is_main_chat else 'gemini-3-flash-preview'
+        
+        # Initialize sticky state mapping if needed: { intended_model: (override_model, expiry_timestamp) }
+        if not hasattr(self, '_sticky_fallback'):
+            self._sticky_fallback = {}
+            
+        current_time = time.time()
+        sticky_data = self._sticky_fallback.get(intended_primary)
+        
+        if sticky_data and current_time < sticky_data[1]:
+            primary_model = sticky_data[0]
+            secondary_model = None
+        else:
+            primary_model = intended_primary
+            secondary_model = 'gemini-3-flash-preview' if is_main_chat else None
+            if sticky_data: # State expired
+                self._sticky_fallback.pop(intended_primary, None)
 
         FALLBACK_CHAIN = [
             'gemini-2.5-flash',
@@ -180,11 +195,7 @@ class AI(commands.Cog, name="AI"):
 
         # ------------------------------------------------------------------
         # Inner helper: one model call with 503 exponential backoff.
-        # Returns (result, exc):
-        #   - (result, None)  on success
-        #   - (None,   exc)   on failure — exc tells the caller WHY it failed
-        # Exits immediately on 429/quota (no point retrying with same key).
-        # Exits immediately on unknown errors so they propagate up.
+        # Returns (result, exc)
         # ------------------------------------------------------------------
         async def _attempt(client, model, cfg):
             last_exc = None
@@ -211,6 +222,19 @@ class AI(commands.Cog, name="AI"):
             s = str(exc).lower()
             return any(k in s for k in ("429", "exhausted", "quota", "503", "unavailable"))
 
+        def _handle_success(model_used):
+            """Tracks the working model to bypass future failures for 4 minutes."""
+            if model_used != intended_primary:
+                curr_sticky = self._sticky_fallback.get(intended_primary)
+                # Log only if this is newly stuck to avoid spamming the console on every success
+                if not curr_sticky or curr_sticky[0] != model_used:
+                    log.warning(f"Sticky fallback active: staying on '{model_used}' for 4 minutes due to outages.")
+                self._sticky_fallback[intended_primary] = (model_used, time.time() + 240)
+            else:
+                if intended_primary in self._sticky_fallback:
+                    log.info(f"Primary model '{intended_primary}' recovered. Resuming normal operations.")
+                    self._sticky_fallback.pop(intended_primary, None)
+
         # ------------------------------------------------------------------
         # Main key-rotation loop
         # ------------------------------------------------------------------
@@ -224,6 +248,7 @@ class AI(commands.Cog, name="AI"):
             # Step 1 — try primary model
             result, exc = await _attempt(client, primary_model, config)
             if result:
+                _handle_success(primary_model)
                 return result
 
             last_exc = exc
@@ -238,6 +263,7 @@ class AI(commands.Cog, name="AI"):
             if secondary_model:
                 result, exc2 = await _attempt(client, secondary_model, config)
                 if result:
+                    _handle_success(secondary_model)
                     return result
                 last_exc = exc2
                 if not _is_retryable(exc2):
@@ -256,9 +282,12 @@ class AI(commands.Cog, name="AI"):
         last_client = clients[self.current_client_idx % len(clients)]
 
         for fb_model in FALLBACK_CHAIN:
+            if fb_model == primary_model:
+                continue # Skip if already tried as the sticky model
             log.warning(f"  → Trying '{fb_model}'")
             result, exc = await _attempt(last_client, fb_model, config)
             if result:
+                _handle_success(fb_model)
                 return result
             last_exc = exc
             log.warning(f"  → '{fb_model}' failed: {exc}")
@@ -508,7 +537,7 @@ class AI(commands.Cog, name="AI"):
         """Optionally perform web search and return context string."""
         prompt_lower = clean_prompt.lower()
         auto_search = (message.guild and message.guild.id in self.auto_web_guilds) or (message.author.id in self.auto_web_users)
-        manual_search = any(x in prompt_lower for x in ["search on web", "web:", "search:"])
+        manual_search = any(x in prompt_lower for x in ["search on the web", "search on web", "web:", "search:"])
         
         if not (auto_search or manual_search):
             return ""
