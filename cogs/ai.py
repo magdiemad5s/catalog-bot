@@ -537,7 +537,7 @@ class AI(commands.Cog, name="AI"):
         """Optionally perform web search and return context string."""
         prompt_lower = clean_prompt.lower()
         auto_search = (message.guild and message.guild.id in self.auto_web_guilds) or (message.author.id in self.auto_web_users)
-        manual_search = any(x in prompt_lower for x in ["search on the web", "search on web", "web:", "search:"])
+        manual_search = any(x in prompt_lower for x in ["search on the web", "search on web", "based on web", "web:", "search:"])
         
         if not (auto_search or manual_search):
             return ""
@@ -565,11 +565,12 @@ class AI(commands.Cog, name="AI"):
                         results = []
                         for q in queries[:2]:
                             try:
-                                res = DDGS().text(q, max_results=3)
+                                # timeout=3 drastically speeds up fallback from failing internal endpoints like grokipedia
+                                res = DDGS(timeout=3).text(q, max_results=3)
                                 if res:
                                     snippets = "\n".join([f"- {r.get('title')}: {r.get('body')}" for r in res])
                                     results.append(f"🔍 [Search: '{q}']:\n{snippets}")
-                                time.sleep(1)
+                                time.sleep(0.5)
                             except: pass
                         return "\n\n".join(results)
 
