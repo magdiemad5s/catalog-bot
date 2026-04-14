@@ -195,13 +195,13 @@ class Games(commands.Cog):
     ])
     async def minesweeper(self, ctx: commands.Context, difficulty: str = "easy"):
         configs = {
-            "easy": (5, 5),
-            "medium": (5, 8),
+            "easy": (3, 3),
+            "medium": (4, 6),
             "hard": (5, 12)
         }
         size, mines = configs[difficulty]
         view = MinesweeperView(ctx.author.id, size, mines, difficulty)
-        await ctx.send(f"Minesweeper - {difficulty.capitalize()} (5x5 Grid)", view=view)
+        await ctx.send(f"Minesweeper - {difficulty.capitalize()} ({size}x{size} Grid)", view=view)
 
     @commands.hybrid_command(name="roulette", description="Start a Russian Roulette lobby")
     async def roulette(self, ctx: commands.Context, bet_xp: int = 50):
