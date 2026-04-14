@@ -66,6 +66,26 @@ async def mafia_state(request):
         for pdata in state['players'].values():
             pdata['role'] = "Lobby"
             pdata['team'] = "Lobby"
+
+    # Security: Mask night actions and votes
+    if not is_spectator:
+        me = session.players.get(int(player_id))
+        
+        # Mask night_actions (Everyone only sees their own role's action)
+        new_night_actions = {}
+        if me and me.role in state.get('night_actions', {}):
+             new_night_actions[me.role] = state['night_actions'][me.role]
+        state['night_actions'] = new_night_actions
+        
+        # Mask mafia_votes (Only Mafia see mafia_votes)
+        if me and me.role != "Mafia":
+            state['mafia_votes'] = {}
+            
+    else:
+        # Spectators see nothing secret
+        state['night_actions'] = {}
+        state['mafia_votes'] = {}
+        # They can see day_votes (public)
     
     return web.json_response(state)
 
@@ -126,6 +146,28 @@ async def mafia_vote_start(request):
         await cog._handle_start_vote(session, int(player_id))
     
     return web.json_response({"status": "voted"})
+
+@mafia_routes.post('/mafia/{session_id}/leave')
+async def mafia_leave(request):
+    """Player leaves the lobby."""
+    session, session_id = get_session_and_id(request)
+    if not session or session.phase != "lobby":
+        return web.json_response({"error": "Cannot leave now"}, status=400)
+    
+    data = await request.json()
+    player_id = data.get('player_id')
+    token = data.get('rejoin_token')
+    
+    # Validate token
+    stored_tokens = _rejoin_tokens.get(session_id, {})
+    if stored_tokens.get(token) != int(player_id):
+        return web.json_response({"error": "Invalid token"}, status=403)
+    
+    cog = request.app['bot'].get_cog("MafiaCog")
+    if cog:
+        await cog._handle_leave(session, int(player_id))
+    
+    return web.json_response({"status": "left"})
 
 @mafia_routes.post('/mafia/{session_id}/action')
 async def mafia_action(request):

@@ -259,12 +259,12 @@
                 </div>
             </div>
 
-            <div id="vote-prompt" class="hidden" style="text-align: center;">
-                <h2 style="margin-bottom: 20px;">The Town is Voting...</h2>
-                <div id="vote-buttons" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-                    <!-- Vote buttons injected here -->
+            <div id="vote-prompt" class="hidden" style="text-align: center; width: 100%;">
+                <h2 id="action-title" style="margin-bottom: 20px;">The Town is Voting...</h2>
+                <div id="vote-buttons" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 30px;">
+                    <!-- Action buttons injected here -->
                 </div>
-                <div class="tension-meter">
+                <div class="tension-meter" style="margin: 0 auto;">
                     <div class="tension-bar" id="tension-bar"></div>
                 </div>
             </div>
@@ -272,9 +272,14 @@
             <div id="lobby-wait" style="text-align: center;">
                 <h2 style="font-size: 2rem; margin-bottom: 10px;">Lobby</h2>
                 <p id="lobby-status" style="margin-bottom: 20px;">Waiting for players (min 5)...</p>
-                <button id="btn-vote-start" class="btn-save" style="max-width: 250px; margin: 0 auto; display: none;">
-                    Vote to Start (0/0)
-                </button>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="btn-vote-start" class="btn-save" style="max-width: 250px; display: none;">
+                        Vote to Start (0/0)
+                    </button>
+                    <button id="btn-leave-lobby" class="btn-save" style="max-width: 150px; background: #3f4147;">
+                        Leave Lobby
+                    </button>
+                </div>
             </div>
         </section>
 
@@ -464,7 +469,7 @@
                 case 'vote_update':
                     if (data.type === 'start_vote') {
                         updateStartVoteUI(data.count, data.threshold);
-                    } else {
+                    } else if (data.votes) {
                         updateTension(data.votes);
                     }
                     playClick();
@@ -508,6 +513,7 @@
 
             // Active UI components
             const me = state.players[myId];
+            
             if (state.phase === 'lobby') {
                 const count = Object.keys(state.players).length;
                 const threshold = Math.ceil(count * 0.75);
@@ -529,6 +535,7 @@
                 }
             } else {
                 document.getElementById('lobby-wait').classList.add('hidden');
+                document.getElementById('vote-prompt').classList.remove('hidden');
                 document.getElementById('round-info').innerText = `Round ${state.round}`;
                 document.getElementById('round-info').classList.remove('hidden');
                 
@@ -537,6 +544,9 @@
                     document.getElementById('my-role-card').classList.remove('hidden');
                     document.getElementById('assigned-role-name').innerText = me.role;
                     document.getElementById('assigned-icon').querySelector('use').setAttribute('xlink:href', `#icon-${me.role.toLowerCase()}`);
+                    
+                    // Render interactive buttons
+                    renderActions(state, me);
                 }
             }
 
@@ -573,7 +583,10 @@
         function updateTension(votes) {
             const bar = document.getElementById('tension-bar');
             let maxVotes = 0;
-            for (let v of Object.values(votes)) if (v > maxVotes) maxVotes = v;
+            const voteArr = Object.values(votes);
+            if (voteArr.length > 0) {
+                maxVotes = Math.max(...voteArr);
+            }
             
             const count = Object.keys(gameState?.players || {}).filter(k => gameState.players[k].alive).length;
             const threshold = Math.floor(count / 2) + 1;
@@ -581,6 +594,92 @@
             const percent = Math.min((maxVotes / threshold) * 100, 100);
             bar.style.width = percent + '%';
             bar.classList.toggle('danger', percent >= 80);
+        }
+
+        function renderActions(state, me) {
+            const container = document.getElementById('vote-buttons');
+            const title = document.getElementById('action-title');
+            
+            if (!me.alive) {
+                title.innerText = "You are a ghost. Observe and whisper.";
+                container.innerHTML = "";
+                return;
+            }
+
+            let candidates = [];
+            let actionType = 'vote';
+
+            if (state.phase === 'day') {
+                title.innerText = "Who should the town execute?";
+                candidates = Object.values(state.players).filter(p => p.alive);
+                actionType = 'vote';
+            } else if (state.phase === 'night') {
+                actionType = 'night_action';
+                const config = {
+                    "Mafia": { title: "Which soul will you eliminate?", icon: "⚔️" },
+                    "Doctor": { title: "Who will you protect tonight?", icon: "🛡️" },
+                    "Detective": { title: "Who will you investigate?", icon: "🔍" },
+                    "Vigilante": { title: "Take your shot? (Leave blank to pass)", icon: "🔫" }
+                };
+                
+                if (config[me.role]) {
+                    title.innerText = config[me.role].title;
+                    candidates = Object.values(state.players).filter(p => p.alive);
+                    
+                    // Special rules
+                    if (me.role === 'Doctor') {
+                        // Can't self-protect back to back
+                        candidates = candidates.filter(p => p.user_id != me.last_protected);
+                    }
+                    if (me.role === 'Detective' || me.role === 'Mafia') {
+                        // Don't target self
+                        candidates = candidates.filter(p => p.user_id != me.user_id);
+                    }
+                } else {
+                    title.innerText = "The night is long. Sleep safe...";
+                    container.innerHTML = "";
+                    return;
+                }
+            }
+
+            container.innerHTML = "";
+            candidates.forEach(p => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-save'; // Reuse existing dashboard button style or similar
+                btn.style.padding = '8px 15px';
+                btn.style.fontSize = '0.8rem';
+                btn.innerText = p.display_name;
+                
+                // Highlight current selection
+                const currentSelection = (state.phase === 'day') ? state.day_votes[me.user_id] 
+                                       : (me.role === 'Mafia' ? state.mafia_votes[me.user_id] : state.night_actions[me.role]);
+                
+                if (currentSelection == p.user_id) {
+                    btn.style.background = 'var(--accent-primary)';
+                    btn.classList.add('active');
+                }
+
+                btn.onclick = () => submitAction(p.user_id, actionType);
+                container.appendChild(btn);
+            });
+        }
+
+        async function submitAction(targetId, type) {
+            playClick();
+            const res = await fetch(`${apiBase}/mafia/${sessionId}/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    player_id: myId,
+                    rejoin_token: myToken,
+                    action_type: type,
+                    target_id: targetId
+                })
+            });
+            if (res.ok) {
+                addLog(`Action submitted.`);
+                startPolling(); // Refresh state immediately
+            }
         }
 
         function showParchment(text) {
@@ -615,6 +714,20 @@
                 document.getElementById('btn-vote-start').disabled = true;
                 document.getElementById('btn-vote-start').style.opacity = 0.6;
                 addLog("You voted to start the game.");
+            }
+        };
+
+        document.getElementById('btn-leave-lobby').onclick = async () => {
+            if (!confirm("Are you sure you want to leave the lobby?")) return;
+            const res = await fetch(`${apiBase}/mafia/${sessionId}/leave`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_id: myId, rejoin_token: myToken })
+            });
+            if (res.ok) {
+                localStorage.removeItem(`mafia_id_${sessionId}`);
+                localStorage.removeItem(`mafia_token_${sessionId}`);
+                window.location.reload();
             }
         };
 
