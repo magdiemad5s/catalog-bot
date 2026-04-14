@@ -226,6 +226,7 @@
             <h1 id="game-title">MAFIA NOIR</h1>
             <span class="phase-badge">Lobby</span>
             <span id="round-info" class="hidden">Round 1</span>
+            <span id="timer-display" class="hidden" style="background: rgba(237, 66, 69, 0.2); color: var(--accent-mafia); padding: 5px 10px; border-radius: 4px; font-weight: 800; border: 1px solid var(--accent-mafia); margin-left: 10px;">00:00</span>
         </div>
         <div class="user-meta">
             <span class="mute-toggle" onclick="toggleMute()"><i class="fas fa-volume-up"></i></span>
@@ -238,6 +239,11 @@
             <div class="player-list" id="player-list">
                 <!-- Players injected here -->
             </div>
+            <div id="action-reports" class="hidden" style="padding: 15px; background: rgba(88, 101, 242, 0.1); border-top: 1px solid var(--border-noir); border-bottom: 2px solid var(--accent-primary);">
+                <div class="section-header" style="padding-left: 0; border-bottom: none; margin-bottom: 5px; color: var(--accent-primary);">Night Report</div>
+                <p id="report-text" style="font-size: 0.8rem; font-style: italic;"></p>
+            </div>
+
             <div class="section-header">Game Log</div>
             <div class="chat-messages" id="game-log" style="font-size: 0.75rem; border-top: 1px solid var(--border-noir); padding-top: 10px;">
                 <!-- System events here -->
@@ -317,106 +323,152 @@
         let isMuted = localStorage.getItem('mafia_mute') === 'true';
         let gameState = null;
         let currentChannel = 'global';
+        let pollingActive = true;
+
+        const ROLE_GUIDE = {
+            "Villager": { emoji: "👤", desc: "Standard townie. Your only weapon is your vote." },
+            "Detective": { emoji: "🔍", desc: "Investigate one player each night to find their team." },
+            "Doctor": { emoji: "💊", desc: "Protect one player each night from being killed." },
+            "Vigilante": { emoji: "🔫", desc: "Kill one player per game at night. Use it wisely." },
+            "Mafia": { emoji: "🔪", desc: "Collaborate with other Mafia to kill one townie each night." },
+            "Framer": { emoji: "🎭", desc: "Frame one player each night. If investigated, they appear as Mafia." },
+            "Jester": { emoji: "🃏", desc: "Win by getting lynched by the town during the day." }
+        };
 
         /* --- AUDIO ENGINE (Web Audio API) --- */
-        const AudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const mainGain = AudioCtx.createGain();
-        mainGain.connect(AudioCtx.destination);
-        mainGain.gain.value = isMuted ? 0 : 0.4;
+        let AudioCtx = null;
+        let mainGain = null;
+
+        function getAudioCtx() {
+            if (!AudioCtx) {
+                AudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                mainGain = AudioCtx.createGain();
+                mainGain.connect(AudioCtx.destination);
+                mainGain.gain.value = isMuted ? 0 : 0.4;
+            }
+            if (AudioCtx.state === 'suspended') AudioCtx.resume();
+            return AudioCtx;
+        }
 
         function playArpeggio() {
+            const ctx = getAudioCtx();
             const freqs = [523.25, 659.25, 783.99]; // C5, E5, G5
             freqs.forEach((f, i) => {
-                const osc = AudioCtx.createOscillator();
-                const g = AudioCtx.createGain();
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(f, AudioCtx.currentTime + i*0.08);
-                g.gain.setValueAtTime(0.3, AudioCtx.currentTime + i*0.08);
-                g.gain.exponentialRampToValueAtTime(0.01, AudioCtx.currentTime + i*0.08 + 0.3);
+                osc.frequency.setValueAtTime(f, ctx.currentTime + i*0.08);
+                g.gain.setValueAtTime(0.3, ctx.currentTime + i*0.08);
+                g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i*0.08 + 0.3);
                 osc.connect(g); g.connect(mainGain);
-                osc.start(AudioCtx.currentTime + i*0.08);
-                osc.stop(AudioCtx.currentTime + i*0.08 + 0.4);
+                osc.start(ctx.currentTime + i*0.08);
+                osc.stop(ctx.currentTime + i*0.08 + 0.4);
             });
         }
 
         function playDrone() {
-            const osc = AudioCtx.createOscillator();
-            const g = AudioCtx.createGain();
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
             osc.frequency.value = 60;
-            g.gain.setValueAtTime(0, AudioCtx.currentTime);
-            g.gain.linearRampToValueAtTime(0.15, AudioCtx.currentTime + 3);
-            g.gain.linearRampToValueAtTime(0, AudioCtx.currentTime + 5);
+            g.gain.setValueAtTime(0, ctx.currentTime);
+            g.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 3);
+            g.gain.linearRampToValueAtTime(0, ctx.currentTime + 5);
             osc.connect(g); g.connect(mainGain);
-            osc.start(); osc.stop(AudioCtx.currentTime + 5);
+            osc.start(); osc.stop(ctx.currentTime + 5);
         }
 
         function playSweep() {
-            const osc = AudioCtx.createOscillator();
-            const g = AudioCtx.createGain();
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
             osc.type = 'triangle';
-            osc.frequency.setValueAtTime(196, AudioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(392, AudioCtx.currentTime + 1.5);
-            g.gain.setValueAtTime(0.1, AudioCtx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.01, AudioCtx.currentTime + 1.5);
+            osc.frequency.setValueAtTime(196, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(392, ctx.currentTime + 1.5);
+            g.gain.setValueAtTime(0.1, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.5);
             osc.connect(g); g.connect(mainGain);
-            osc.start(); osc.stop(AudioCtx.currentTime + 1.5);
+            osc.start(); osc.stop(ctx.currentTime + 1.5);
         }
 
         function playClick() {
-            const bufferSize = AudioCtx.sampleRate * 0.03;
-            const buffer = AudioCtx.createBuffer(1, bufferSize, AudioCtx.sampleRate);
+            const ctx = getAudioCtx();
+            if (!ctx) return;
+            const bufferSize = ctx.sampleRate * 0.03;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-            const noise = AudioCtx.createBufferSource();
+            const noise = ctx.createBufferSource();
             noise.buffer = buffer;
-            const g = AudioCtx.createGain();
-            g.gain.exponentialRampToValueAtTime(0.01, AudioCtx.currentTime + 0.03);
+            const g = ctx.createGain();
+            g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.03);
             noise.connect(g); g.connect(mainGain);
             noise.start();
         }
 
-        function playBell() {
-            const osc = AudioCtx.createOscillator();
-            const g = AudioCtx.createGain();
-            osc.frequency.value = 110; // A2
-            g.gain.setValueAtTime(0.5, AudioCtx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.001, AudioCtx.currentTime + 2);
+        function playTick(intensity) {
+            if (isMuted) return;
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(60, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(10, ctx.currentTime + 0.05);
+            g.gain.setValueAtTime(0.1 + (intensity * 0.1), ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
             osc.connect(g); g.connect(mainGain);
-            osc.start(); osc.stop(AudioCtx.currentTime + 2);
+            osc.start(); osc.stop(ctx.currentTime + 0.05);
         }
 
-        function toggleMute() {
-            isMuted = !isMuted;
-            mainGain.gain.value = isMuted ? 0 : 0.4;
-            localStorage.setItem('mafia_mute', isMuted);
-            document.querySelector('.mute-toggle i').className = isMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+        function playBell() {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.frequency.value = 110; // A2
+            g.gain.setValueAtTime(0.5, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2);
+            osc.connect(g); g.connect(mainGain);
+            osc.start(); osc.stop(ctx.currentTime + 2);
         }
+
 
         /* --- INITIALIZATION --- */
         async function init() {
-            if (!myNickname) {
-                myNickname = prompt("Enter a nickname for this session:");
-                if (!myNickname) myNickname = "Player_" + Math.floor(Math.random()*1000);
-                localStorage.setItem(`mafia_nickname_${window.location.hostname}`, myNickname);
-            }
+            try {
+                if (!myNickname) {
+                    myNickname = prompt("Enter a nickname for this session:");
+                    if (!myNickname) myNickname = "Player_" + Math.floor(Math.random()*1000);
+                    localStorage.setItem(`mafia_nickname_${window.location.hostname}`, myNickname);
+                }
 
-            if (!myId || !myToken) {
-                // Register via API
-                const dummyId = Math.floor(Math.random() * 1000000);
-                const res = await fetch(`${apiBase}/mafia/${sessionId}/join`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: dummyId, nickname: myNickname })
-                });
-                const data = await res.json();
-                myId = data.player_id;
-                myToken = data.token;
-                localStorage.setItem(`mafia_id_${sessionId}`, myId);
-                localStorage.setItem(`mafia_token_${sessionId}`, myToken);
-            }
+                if (!myId || !myToken) {
+                    // Register via API
+                    const dummyId = Math.floor(Math.random() * 1000000);
+                    const res = await fetch(`${apiBase}/mafia/${sessionId}/join`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: dummyId, nickname: myNickname })
+                    });
+                    
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.error || "Failed to join session");
+                    }
+                    
+                    const data = await res.json();
+                    myId = String(data.player_id); 
+                    myToken = data.token;
+                    localStorage.setItem(`mafia_id_${sessionId}`, myId);
+                    localStorage.setItem(`mafia_token_${sessionId}`, myToken);
+                }
 
-            connect();
-            startPolling();
+                connect();
+                startPolling();
+            } catch (err) {
+                console.error(err);
+                document.getElementById('lobby-status').innerText = "⚠️ Error: " + err.message;
+                document.getElementById('lobby-status').style.color = "var(--accent-mafia)";
+            }
         }
 
         function connect() {
@@ -436,16 +488,59 @@
             ws.onclose = () => setTimeout(connect, 3000);
         }
 
+        let timerInterval;
+        function startUITimer(endTime) {
+            clearInterval(timerInterval);
+            const display = document.getElementById('timer-display');
+            display.classList.remove('hidden');
+            
+            function update() {
+                const now = Date.now() / 1000;
+                const remaining = Math.max(0, Math.floor(endTime - now));
+                
+                const mins = Math.floor(remaining / 60);
+                const secs = remaining % 60;
+                display.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                
+                if (remaining <= 10) {
+                    display.style.animation = 'pulse-red 0.5s infinite';
+                    if (remaining > 0) playTick(1.0 - (remaining / 10)); // Accelerating intensity
+                } else {
+                    display.style.animation = 'none';
+                    if (remaining > 0 && remaining % 2 === 0) playTick(0.2);
+                }
+                
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    display.classList.add('hidden');
+                }
+            }
+            update();
+            timerInterval = setInterval(update, 1000);
+        }
+
+        let pollTimeout;
+        function triggerImmediatePoll() {
+            clearTimeout(pollTimeout);
+            startPolling();
+        }
+
         async function startPolling() {
+            if (!pollingActive) return;
+            
             // Periodic full state sync
             try {
                 const res = await fetch(`${apiBase}/mafia/${sessionId}/state?player_id=${myId}`);
                 if (res.ok) {
                     const data = await res.json();
                     updateUI(data);
+                    if (data.phase === 'ended') {
+                        pollingActive = false;
+                        return;
+                    }
                 }
             } catch(e) {}
-            setTimeout(startPolling, 5000);
+            pollTimeout = setTimeout(startPolling, 5000);
         }
 
         /* --- EVENT HANDLING --- */
@@ -460,6 +555,9 @@
                     if (data.phase === 'day') playSweep();
                     // Hide lobby UI if game started
                     if (data.phase !== 'lobby') document.getElementById('lobby-wait').classList.add('hidden');
+                    
+                    // State refresh to get new end_times
+                    triggerImmediatePoll();
                     break;
                 case 'player_died':
                     addLog(`${data.nickname} died (${data.cause}). They were ${data.role_revealed}.`);
@@ -487,6 +585,14 @@
         function updateUI(state) {
             gameState = state;
             
+            // Timer handling
+            if (state.phase !== 'lobby' && state.phase !== 'ended' && state.phase_end_time) {
+                startUITimer(state.phase_end_time);
+            } else {
+                clearInterval(timerInterval);
+                document.getElementById('timer-display').classList.add('hidden');
+            }
+
             // Player list
             const list = document.getElementById('player-list');
             list.innerHTML = "";
@@ -500,39 +606,54 @@
                 const initials = p.display_name.substring(0,2).toUpperCase();
                 const color = stringToColor(p.display_name);
                 
-                card.innerHTML = `
-                    <div class="player-avatar" style="background: ${color}">${initials}</div>
-                    <div class="player-meta">
-                        <div class="player-name">${p.display_name} ${p.user_id == myId ? '(You)' : ''}</div>
-                        <div class="player-role">${state.phase === 'lobby' ? 'Waiting...' : p.role}</div>
-                    </div>
-                `;
+                const avatar = document.createElement('div');
+                avatar.className = 'player-avatar';
+                avatar.style.background = color;
+                avatar.textContent = initials;
+                
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'player-name';
+                nameDiv.textContent = p.display_name + (String(p.user_id) === String(myId) ? ' (You)' : '');
+                
+                const roleDiv = document.createElement('div');
+                roleDiv.className = 'player-role';
+                roleDiv.textContent = state.phase === 'lobby' ? 'Waiting...' : p.role;
+                
+                const meta = document.createElement('div');
+                meta.className = 'player-meta';
+                meta.appendChild(nameDiv);
+                meta.appendChild(roleDiv);
+                
+                card.appendChild(avatar);
+                card.appendChild(meta);
+                
                 list.appendChild(card);
             });
             document.getElementById('player-count').innerText = `(${Object.keys(state.players).length})`;
 
             // Active UI components
-            const me = state.players[myId];
+            const me = state.players[String(myId)];
             
             if (state.phase === 'lobby') {
                 const count = Object.keys(state.players).length;
-                const threshold = Math.ceil(count * 0.75);
-                const votedCount = state.start_votes ? state.start_votes.length : 0;
-                updateStartVoteUI(votedCount, threshold);
-                
-                if (count >= 5) {
-                    const btn = document.getElementById('btn-vote-start');
-                    btn.style.display = 'block';
-                    if (state.start_votes && state.start_votes.includes(parseInt(myId))) {
-                        btn.innerText = `Voted to Start (${votedCount}/${threshold})`;
-                        btn.disabled = true;
-                        btn.style.opacity = 0.6;
-                    } else {
-                        btn.innerText = `Vote to Start (${votedCount}/${threshold})`;
-                        btn.disabled = false;
-                        btn.style.opacity = 1;
+                    const threshold = Math.ceil(count * 0.75);
+                    const votedCount = state.start_votes ? state.start_votes.length : 0;
+                    updateStartVoteUI(votedCount, threshold);
+                    
+                    if (count >= 5) {
+                        const btn = document.getElementById('btn-vote-start');
+                        btn.style.display = 'block';
+                        // Bug 15: Compare using strings
+                        if (state.start_votes && state.start_votes.map(String).includes(String(myId))) {
+                            btn.innerText = `Voted to Start (${votedCount}/${threshold})`;
+                            btn.disabled = true;
+                            btn.style.opacity = 0.6;
+                        } else {
+                            btn.innerText = `Vote to Start (${votedCount}/${threshold})`;
+                            btn.disabled = false;
+                            btn.style.opacity = 1;
+                        }
                     }
-                }
             } else {
                 document.getElementById('lobby-wait').classList.add('hidden');
                 document.getElementById('vote-prompt').classList.remove('hidden');
@@ -545,6 +666,19 @@
                     document.getElementById('assigned-role-name').innerText = me.role;
                     document.getElementById('assigned-icon').querySelector('use').setAttribute('xlink:href', `#icon-${me.role.toLowerCase()}`);
                     
+                    // Fix description
+                    const guide = ROLE_GUIDE[me.role];
+                    if (guide) document.getElementById('assigned-role-desc').innerText = guide.desc;
+
+                    // Report handling
+                    const reportBox = document.getElementById('action-reports');
+                    if (me.last_result) {
+                        reportBox.classList.remove('hidden');
+                        document.getElementById('report-text').innerText = me.last_result;
+                    } else {
+                        reportBox.classList.add('hidden');
+                    }
+
                     // Render interactive buttons
                     renderActions(state, me);
                 }
@@ -575,7 +709,22 @@
             const el = document.createElement('div');
             el.className = `message ${msg.is_ghost ? 'msg-ghost' : ''}`;
             const color = stringToColor(msg.nickname);
-            el.innerHTML = `<span class="msg-author" style="color: ${color}">${msg.nickname}:</span> <span class="msg-text">${msg.text}</span>`;
+            
+            // Bug 6: Use textContent instead of innerHTML for XSS protection
+            const author = document.createElement('span');
+            author.className = 'msg-author';
+            author.style.color = color;
+            let prefix = '';
+            if (msg.channel === 'mafia') prefix = '🔪 [Mafia] ';
+            else if (msg.channel === 'ghost') prefix = '👻 [Ghost] ';
+            author.textContent = prefix + msg.nickname + ':';
+            
+            const text = document.createElement('span');
+            text.className = 'msg-text';
+            text.textContent = msg.text;
+            
+            el.appendChild(author);
+            el.appendChild(text);
             chat.appendChild(el);
             chat.scrollTop = chat.scrollHeight;
         }
@@ -627,13 +776,14 @@
                     candidates = Object.values(state.players).filter(p => p.alive);
                     
                     // Special rules
+                    // Bug 11: Explicit type coercion for ID comparisons
                     if (me.role === 'Doctor') {
                         // Can't self-protect back to back
-                        candidates = candidates.filter(p => p.user_id != me.last_protected);
+                        candidates = candidates.filter(p => String(p.user_id) !== String(me.last_protected));
                     }
                     if (me.role === 'Detective' || me.role === 'Mafia') {
                         // Don't target self
-                        candidates = candidates.filter(p => p.user_id != me.user_id);
+                        candidates = candidates.filter(p => String(p.user_id) !== String(me.user_id));
                     }
                 } else {
                     title.innerText = "The night is long. Sleep safe...";
@@ -650,11 +800,15 @@
                 btn.style.fontSize = '0.8rem';
                 btn.innerText = p.display_name;
                 
-                // Highlight current selection
-                const currentSelection = (state.phase === 'day') ? state.day_votes[me.user_id] 
-                                       : (me.role === 'Mafia' ? state.mafia_votes[me.user_id] : state.night_actions[me.role]);
+                // Bug 16: Normalize keys for vote lookup
+                const sId = String(myId);
+                const currentSelection = (state.phase === 'day') 
+                    ? String(state.day_votes[sId] ?? "")
+                    : (me.role === 'Mafia' 
+                        ? String(state.mafia_votes[sId] ?? "") 
+                        : String(state.night_actions[sId] ?? ""));
                 
-                if (currentSelection == p.user_id) {
+                if (currentSelection === String(p.user_id)) {
                     btn.style.background = 'var(--accent-primary)';
                     btn.classList.add('active');
                 }
@@ -678,7 +832,7 @@
             });
             if (res.ok) {
                 addLog(`Action submitted.`);
-                startPolling(); // Refresh state immediately
+                triggerImmediatePoll(); // Refresh state immediately
             }
         }
 
@@ -699,7 +853,11 @@
             if (gameState && gameState.phase === 'lobby') {
                 if (Object.keys(gameState.players).length >= 5) {
                     btn.style.display = 'block';
-                    btn.innerText = `Vote to Start (${count}/${threshold})`;
+                    if (gameState.start_votes && gameState.start_votes.map(String).includes(String(myId))) {
+                        btn.innerText = `Voted to Start (${count}/${threshold})`;
+                    } else {
+                        btn.innerText = `Vote to Start (${count}/${threshold})`;
+                    }
                 }
             }
         }
@@ -719,15 +877,22 @@
 
         document.getElementById('btn-leave-lobby').onclick = async () => {
             if (!confirm("Are you sure you want to leave the lobby?")) return;
-            const res = await fetch(`${apiBase}/mafia/${sessionId}/leave`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ player_id: myId, rejoin_token: myToken })
-            });
-            if (res.ok) {
-                localStorage.removeItem(`mafia_id_${sessionId}`);
-                localStorage.removeItem(`mafia_token_${sessionId}`);
-                window.location.reload();
+            try {
+                const res = await fetch(`${apiBase}/mafia/${sessionId}/leave`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: myId, rejoin_token: myToken })
+                });
+                if (res.ok) {
+                    localStorage.removeItem(`mafia_id_${sessionId}`);
+                    localStorage.removeItem(`mafia_token_${sessionId}`);
+                    window.location.reload();
+                } else {
+                    const err = await res.json();
+                    alert("Error: " + (err.error || "Unknown"));
+                }
+            } catch (e) {
+                alert("Network error.");
             }
         };
 
@@ -739,13 +904,24 @@
             return `hsl(${hash % 360}, 60%, 40%)`;
         }
         function playChatPop() {
-            const osc = AudioCtx.createOscillator();
-            const g = AudioCtx.createGain();
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
             osc.frequency.value = 880;
-            g.gain.setValueAtTime(0.05, AudioCtx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.01, AudioCtx.currentTime + 0.08);
+            g.gain.setValueAtTime(0.05, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
             osc.connect(g); g.connect(mainGain);
-            osc.start(); osc.stop(AudioCtx.currentTime + 0.08);
+            osc.start(); osc.stop(ctx.currentTime + 0.08);
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            localStorage.setItem('mafia_mute', isMuted);
+            document.querySelector('.mute-toggle i').className = isMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+            // Bug 2: Only touch mainGain if audio context exists
+            if (mainGain) {
+                mainGain.gain.value = isMuted ? 0 : 0.4;
+            }
         }
 
         /* --- INPUT --- */

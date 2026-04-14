@@ -52,6 +52,7 @@ class Player:
     framed: bool = False
     last_protected: Optional[int] = None
     used_vigilante_shot: bool = False
+    last_result: Optional[str] = None
     
     @property
     def team(self) -> str:
@@ -69,13 +70,18 @@ class GameSession:
     players: Dict[int, Player] = field(default_factory=dict)
     phase: Literal["lobby", "night", "day", "ended"] = "lobby"
     round: int = 1
-    night_actions: Dict[str, int] = field(default_factory=dict) # role -> target_id
+    night_actions: Dict[int, int] = field(default_factory=dict) # player_id -> target_id
     mafia_votes: Dict[int, int] = field(default_factory=dict) # voter_id -> target_id
     day_votes: Dict[int, int] = field(default_factory=dict)   # voter_id -> target_id
     jester_won_id: Optional[int] = None
     lobby_message_id: Optional[int] = None
     task: Optional[asyncio.Task] = None
     start_votes: Set[int] = field(default_factory=set)
+    is_web_focused: bool = False
+    start_time: float = 0.0
+    phase_end_time: float = 0.0
+    session_id: Optional[str] = None
+    join_lock: asyncio.Lock = field(default_factory=asyncio.Lock, compare=False, repr=False)
 
 # --- SESSION STORE ---
 # These are kept at module level for shared access, but managed by the Cog
@@ -126,14 +132,14 @@ class NightActionView(discord.ui.View):
                 view=self
             )
             # Broadcast is handled by Mafia kills being private, but we update vote counts
-            session_id = next((k for k, v in _web_sessions.items() if v == self.session.guild_id), None)
+            session_id = self.session.session_id
             if session_id:
                 counts = {}
                 for tid in self.session.mafia_votes.values():
                     counts[tid] = counts.get(tid, 0) + 1
                 asyncio.create_task(self.cog._broadcast_event(session_id, "vote_update", {"votes": counts, "type": "mafia"}))
         else:
-            self.session.night_actions[self.role] = self.target_id
+            self.session.night_actions[self.player.user_id] = self.target_id
             await interaction.response.edit_message(
                 content=f"✅ Target selected: <@{self.target_id}>. Waiting for night to end...",
                 view=self
@@ -161,7 +167,7 @@ class VoteView(discord.ui.View):
         self.session.day_votes[interaction.user.id] = target_id
         await interaction.response.send_message(f"Voted for <@{target_id}>.", ephemeral=True)
         
-        session_id = next((k for k, v in _web_sessions.items() if v == self.session.guild_id), None)
+        session_id = self.session.session_id
         if session_id:
             counts = {}
             for tid in self.session.day_votes.values():
@@ -243,6 +249,9 @@ class MafiaCog(commands.Cog):
                 tokens = json.loads(rejoin_tokens_json)
                 
                 session = self._session_from_dict(state)
+                # Bug 7: Ensure session_id is authoritative from DB key
+                session.session_id = session_id
+                
                 _sessions[guild_id] = session
                 _web_sessions[session_id] = guild_id
                 _rejoin_tokens[session_id] = tokens
@@ -268,7 +277,8 @@ class MafiaCog(commands.Cog):
         session = _sessions.get(ctx.guild.id)
         
         # Bug 8: Generate session_id FIRST
-        session_id = next((k for k, v in _web_sessions.items() if v == ctx.guild.id), None)
+        session_id = session.session_id if session else None
+        # Bug 10: Store session_id on session
         if not session_id:
             session_id = str(uuid.uuid4())
             _web_sessions[session_id] = ctx.guild.id
@@ -276,7 +286,7 @@ class MafiaCog(commands.Cog):
 
         # Auto-create lobby if none exists
         if not session:
-            session = GameSession(ctx.guild.id, ctx.channel.id, ctx.author.id)
+            session = GameSession(ctx.guild.id, ctx.channel.id, ctx.author.id, session_id=session_id)
             _sessions[ctx.guild.id] = session
             
             embed = self._make_lobby_embed(session)
@@ -284,6 +294,8 @@ class MafiaCog(commands.Cog):
             msg = await ctx.send(embed=embed, view=view)
             session.lobby_message_id = msg.id
             self._persist_session(session_id)
+        else:
+            session.session_id = session_id
 
         from db.local_db import get_config
         game_url = self._get_game_url(session_id)
@@ -293,11 +305,12 @@ class MafiaCog(commands.Cog):
             description=f"You can now play this session in your browser!\n\n**[Click here to Play]({game_url})**",
             color=0x5865F2
         )
-        embed.add_field(name="Host", value=ctx.guild.get_member(session.host_id).display_name if ctx.guild.get_member(session.host_id) else "Unknown")
+        embed.add_field(name="Host", value=ctx.author.display_name)
         embed.add_field(name="Server", value=ctx.guild.name)
         embed.set_footer(text="Unique session ID: " + session_id)
         
         await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+        session.is_web_focused = True # Enable web-focused mode
         self._persist_session(session_id)
         await self._update_lobby_embed(session)
 
@@ -307,11 +320,11 @@ class MafiaCog(commands.Cog):
             return await ctx.send("A game is already in progress or lobby is open.", ephemeral=True)
         
         session = GameSession(ctx.guild.id, ctx.channel.id, ctx.author.id)
-        session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name)
+        session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name[:32]) # Bug 9: Truncate nickname
         _sessions[ctx.guild.id] = session
         
-        # Check for existing web session
-        session_id = next((k for k, v in _web_sessions.items() if v == ctx.guild.id), None)
+        # New lobbies start without a web session id until /mafia web is used
+        session_id = None
         
         embed = self._make_lobby_embed(session)
         view = LobbyView(self, ctx.guild.id, session_id)
@@ -325,13 +338,15 @@ class MafiaCog(commands.Cog):
         if not session or session.phase != "lobby":
             return await ctx.send("No active lobby to join.", ephemeral=True)
         
-        if ctx.author.id in session.players:
-            return await ctx.send("You're already in!", ephemeral=True)
-        
-        if any(p.display_name.lower() == ctx.author.display_name.lower() for p in session.players.values()):
-            return await ctx.send("A player with this name is already in the game!", ephemeral=True)
-        
-        session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name)
+        async with session.join_lock:
+            if ctx.author.id in session.players:
+                return await ctx.send("You're already in!", ephemeral=True)
+            
+            if any(p.display_name.lower() == ctx.author.display_name.lower() for p in session.players.values()):
+                return await ctx.send("A player with this name is already in the game!", ephemeral=True)
+            
+            session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name[:32])
+
         await ctx.send("Joined the mafia lobby!", ephemeral=True)
         await self._update_lobby_embed(session)
 
@@ -340,6 +355,9 @@ class MafiaCog(commands.Cog):
         session = _sessions.get(ctx.guild.id)
         if not session or session.phase != "lobby":
             return await ctx.send("No lobby active.", ephemeral=True)
+        
+        if ctx.author.id != session.host_id and not ctx.author.guild_permissions.administrator:
+            return await ctx.send("Only the host can start the game.", ephemeral=True)
         
         if len(session.players) < 5:
             return await ctx.send("You need at least 5 players to start.")
@@ -388,7 +406,7 @@ class MafiaCog(commands.Cog):
 
         if session.task: session.task.cancel()
         
-        session_id = next((k for k, v in _web_sessions.items() if v == guild_id), None)
+        session_id = session.session_id
         if session_id:
             if session_id in _web_sessions: del _web_sessions[session_id]
             if session_id in _rejoin_tokens: del _rejoin_tokens[session_id]
@@ -413,15 +431,33 @@ class MafiaCog(commands.Cog):
         if player_id in session.start_votes:
             session.start_votes.remove(player_id)
             
+        session_id = session.session_id
+        if session_id and session_id in _rejoin_tokens:
+            tokens_to_del = [tok for tok, uid in _rejoin_tokens[session_id].items() if uid == player_id]
+            for tok in tokens_to_del:
+                del _rejoin_tokens[session_id][tok]
+                
         await self._update_lobby_embed(session)
-        session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
-        if session_id:
-            self._persist_session(session_id)
-            # Notify web clients via full state update or generic broadcast
-            # We'll just update the lobby count for now; full state poll handles the rest.
+        
+        count = len(session.players)
+        votes = len(session.start_votes)
+        threshold = math.ceil(count * 0.75)
+        
+        if votes >= threshold and count >= 5:
+            session.phase = "starting"
+            if session_id:
+                asyncio.create_task(self._broadcast_event(session_id, "chat_message", {
+                    "sender_id": 0, "nickname": "System", "text": "🛡️ 75% Majority reached by dropout! Assigning roles...", "timestamp": int(asyncio.get_running_loop().time())
+                }))
+            await self._assign_roles(session)
+            for p in session.players.values(): await self._send_role_dm(p)
+            session.task = asyncio.create_task(self._game_loop(session))
+        else:
+            if session_id:
+                asyncio.create_task(self._broadcast_event(session_id, "vote_update", {"type": "start_vote", "count": votes, "threshold": threshold}))
+                self._persist_session(session_id)
         
         if not session.players:
-            # Optional: auto-cleanup empty lobbies? 
             pass
 
     async def _handle_start_vote(self, session: GameSession, player_id: int):
@@ -436,7 +472,7 @@ class MafiaCog(commands.Cog):
         if votes >= threshold and count >= 5:
             session.phase = "starting"
             
-            session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+            session_id = session.session_id
             if session_id:
                 await self._broadcast_event(session_id, "chat_message", {
                     "sender_id": 0,
@@ -451,7 +487,7 @@ class MafiaCog(commands.Cog):
                 
             session.task = asyncio.create_task(self._game_loop(session))
         else:
-            session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+            session_id = session.session_id
             if session_id:
                 asyncio.create_task(self._broadcast_event(session_id, "vote_update", {
                     "type": "start_vote",
@@ -469,7 +505,7 @@ class MafiaCog(commands.Cog):
         if not channel:
             return
         try:
-            session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+            session_id = session.session_id
             msg = await channel.fetch_message(session.lobby_message_id)
             await msg.edit(embed=self._make_lobby_embed(session), view=LobbyView(self, session.guild_id, session_id))
         except Exception:
@@ -487,9 +523,9 @@ class MafiaCog(commands.Cog):
         random.shuffle(p_ids)
         
         if count <= 6:
-            r_list = ["Mafia", "Detective", "Doctor"] + ["Villager"] * (count - 3)
+            r_list = ["Mafia", "Mafia", "Detective", "Doctor"] + ["Villager"] * (count - 4)
         elif count <= 9:
-            r_list = ["Mafia", "Mafia", "Detective", "Doctor", "Vigilante"] + ["Villager"] * (count - 5)
+            r_list = ["Mafia", "Mafia", "Detective", "Doctor", "Vigilante", "Framer"] + ["Villager"] * (count - 6)
         else:
             r_list = ["Mafia", "Mafia", "Mafia", "Detective", "Doctor", "Vigilante", "Framer", "Jester"] + ["Villager"] * (count - 8)
         
@@ -512,10 +548,20 @@ class MafiaCog(commands.Cog):
         except: pass
 
     async def _game_loop(self, session: GameSession):
-        session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+        session_id = session.session_id
+        resumed = session.phase in ["night", "day"]
+        
+        if resumed and session.phase == "day":
+            # Note: Night deaths are lost on crash, passing []
+            await self._run_day_phase(session, [], resume=True)
+            if session.phase == "ended":
+                return
+            session.round += 1
+            resumed = False
+
         while session.phase != "ended":
-            # --- NIGHT PHASE ---
-            await self._run_night_phase(session, session_id)
+            await self._run_night_phase(session, session_id, resume=resumed)
+            resumed = False # Reset flag
             
             # --- RESOLUTION ---
             deaths = await self._resolve_night_actions(session)
@@ -538,77 +584,121 @@ class MafiaCog(commands.Cog):
             if session.phase == "ended": break
             session.round += 1
 
-    async def _run_night_phase(self, session: GameSession, session_id: str):
+    async def _run_night_phase(self, session: GameSession, session_id: str, resume: bool = False):
         """Runs the night logic."""
-        # Bug 2: Only clear if not resuming a mid-night state
-        if not session.night_actions and not session.mafia_votes:
+        if not resume:
+            # Clear previous state
             session.night_actions.clear()
             session.mafia_votes.clear()
-            
-        session.phase = "night"
+            for p in session.players.values():
+                p.last_result = None # Clear old results
+                
+            session.phase = "night"
+            session.start_time = time.time()
+            session.phase_end_time = session.start_time + 45
         
-        embed = discord.Embed(title=f"🌙 Night {session.round} Falls...", description="The channel is now muted. Role holders, check your DMs for night actions!", color=COLORS['night'])
-        await self._announce(session, embed)
+        embed = discord.Embed(title=f"🌙 Night {session.round} Falls...", description="The city sleeps. Role holders, check your DMs for night actions!", color=COLORS['night'])
+        if not session.is_web_focused and not resume: # Only announce on first entry
+            await self._announce(session, embed)
         
-        for p in session.players.values():
-            if not p.alive or not ROLE_CONFIG[p.role]['has_night_action']: continue
-            if p.role == "Vigilante" and p.used_vigilante_shot: continue
-            
-            user = self.bot.get_user(p.user_id)
-            if not user: continue
-            
-            options = []
-            for target in session.players.values():
-                if not target.alive: continue
-                if target.user_id == p.user_id:
-                    if p.role != "Doctor": continue
-                    if p.last_protected == p.user_id: continue
-                options.append(discord.SelectOption(label=target.display_name, value=str(target.user_id)))
+        if not resume:
+            for p in session.players.values():
+                if not p.alive or not ROLE_CONFIG[p.role]['has_night_action']: continue
+                if p.role == "Vigilante" and p.used_vigilante_shot: continue
+                
+                if session.is_web_focused:
+                    continue
+                
+                user = self.bot.get_user(p.user_id)
+                if not user: continue
+                
+                # Bug 8: Role-specific placeholders
+                placeholders = {
+                    "Doctor": "Choose who to protect...",
+                    "Detective": "Choose who to investigate...",
+                    "Vigilante": "Choose who to shoot...",
+                    "Framer": "Choose who to frame...",
+                    "Mafia": "Choose who to eliminate...",
+                }
+                placeholder = placeholders.get(p.role, "Choose your target...")
+                
+                options = []
+                for target in session.players.values():
+                    if not target.alive:
+                        continue
+                    if target.user_id == p.user_id:
+                        # Bug 4: Only Doctor can self-target, and not consecutively
+                        if p.role != "Doctor":
+                            continue
+                        if p.last_protected == p.user_id:
+                            continue
+                    options.append(discord.SelectOption(label=target.display_name, value=str(target.user_id)))
 
-            if not options: continue
+                if not options: continue
 
-            view = NightActionView(self, p.role, session, p, options)
-            try:
-                await user.send(content=f"Choose your night action for Night {session.round}:", view=view)
-            except Exception: pass
+                view = NightActionView(self, p.role, session, p, options)
+                try:
+                    await user.send(content=f"{placeholder} (Night {session.round})", view=view)
+                except Exception: pass
             
         if session_id:
-            await self._broadcast_event(session_id, "phase_change", {
-                "phase": "night",
-                "round": session.round,
-                "message": "Night falls. Role actions are active."
-            })
+            if not resume:
+                await self._broadcast_event(session_id, "phase_change", {
+                    "phase": "night",
+                    "round": session.round,
+                    "message": "Night falls. Role actions are active."
+                })
+            else:
+                await self._broadcast_event(session_id, "phase_change", {
+                    "phase": "night",
+                    "round": session.round,
+                    "message": f"Game resuming — Night {session.round} is in progress."
+                })
             self._persist_session(session_id)
 
-        await asyncio.sleep(45)
+        remaining = max(0, session.phase_end_time - time.time())
+        await asyncio.sleep(remaining)
 
     async def _resolve_night_actions(self, session: GameSession) -> List[Player]:
         for p in session.players.values():
             p.protected = False
             p.framed = False
         
-        framer_target = session.night_actions.get("Framer")
-        if framer_target and framer_target in session.players:
-            session.players[framer_target].framed = True
-            
-        doc_target = session.night_actions.get("Doctor")
-        if doc_target and doc_target in session.players:
-            session.players[doc_target].protected = True
-            doc_player = next((p for p in session.players.values() if p.role == "Doctor"), None)
-            if doc_player: doc_player.last_protected = doc_target
-            
-        det_target_id = session.night_actions.get("Detective")
-        if det_target_id:
-            det_p = next((p for p in session.players.values() if p.role == "Detective"), None)
-            if det_p:
-                target = session.players[det_target_id]
-                result = "Mafia" if (target.team == "mafia" or target.framed) else "Innocent"
-                user = self.bot.get_user(det_p.user_id)
-                if user:
-                    try: await user.send(f"🔍 **Investigation Result:** {target.display_name} is **{result}**.")
-                    except: pass
+        # Process actions by role priority: Framer -> Doctor -> Detective -> Killers
+        actions = session.night_actions
+        
+        # Framer
+        for pid, target_id in actions.items():
+            if session.players[pid].role == "Framer":
+                if target_id in session.players:
+                    target = session.players[target_id]
+                    target.framed = True
+                    session.players[pid].last_result = f"🎭 You framed {target.display_name}."
+                    
+        # Doctor
+        for pid, target_id in actions.items():
+            if session.players[pid].role == "Doctor":
+                if target_id in session.players:
+                    target = session.players[target_id]
+                    target.protected = True
+                    session.players[pid].last_protected = target_id
+                    session.players[pid].last_result = f"💊 You protected {target.display_name}."
+
+        # Detective
+        for pid, target_id in actions.items():
+            if session.players[pid].role == "Detective":
+                if target_id in session.players:
+                    target = session.players[target_id]
+                    is_mafia = (target.team == "mafia" or target.framed)
+                    res = "Mafia" if is_mafia else "Innocent"
+                    session.players[pid].last_result = f"🔍 Investigation: {target.display_name} is {res}."
+                    user = self.bot.get_user(pid)
+                    if user:
+                        try: await user.send(f"🔍 **Investigation Result:** {target.display_name} is **{res}**.")
+                        except: pass
         
         deaths = []
+        # Mafia Kills
         if session.mafia_votes:
             v_counts: Dict[int, int] = {}
             for target_id in session.mafia_votes.values():
@@ -620,34 +710,50 @@ class MafiaCog(commands.Cog):
             if target and target.alive and not target.protected:
                 target.alive = False
                 deaths.append(target)
+            
+            # Bug 2: Update Mafia feedback with guard
+            if target:
+                for pid in session.players:
+                    if session.players[pid].role == "Mafia" and session.players[pid].alive:
+                        result = f"🔪 Target {target.display_name} was {'eliminated' if target in deaths else 'protected'}."
+                        session.players[pid].last_result = result
                 
-        vi_target_id = session.night_actions.get("Vigilante")
-        if vi_target_id:
-            vi_p = next((p for p in session.players.values() if p.role == "Vigilante"), None)
-            target = session.players.get(vi_target_id)
-            if vi_p and target:
-                # Bug 4: Harden Vigilante
-                vi_p.used_vigilante_shot = True
-                if target.alive and not target.protected and target not in deaths:
-                    target.alive = False
-                    deaths.append(target)
+        # Vigilante
+        for pid, target_id in actions.items():
+            if session.players[pid].role == "Vigilante":
+                vi_p = session.players[pid]
+                if not vi_p.used_vigilante_shot:
+                    vi_p.used_vigilante_shot = True
+                    target = session.players.get(target_id)
+                    if target and target.alive and not target.protected and target not in deaths:
+                        target.alive = False
+                        deaths.append(target)
+                        vi_p.last_result = f"🔫 You successfully shot {target.display_name}."
+                    elif target:
+                        vi_p.last_result = f"🔫 Your shot at {target.display_name} failed (protected or already dead)."
                         
         return deaths
 
-    async def _run_day_phase(self, session: GameSession, night_deaths: List[Player]):
-        session.phase = "day"
-        session.day_votes.clear()
+    async def _run_day_phase(self, session: GameSession, night_deaths: List[Player], resume: bool = False):
+        if not resume:
+            session.phase = "day"
+            session.day_votes.clear()
+            session.start_time = time.time()
+            session.phase_end_time = session.start_time + 30 # Faster pace
         
         death_txt = "\n".join([f"• {p.display_name} ({p.role})" for p in night_deaths]) or "No one died tonight."
         embed = discord.Embed(title=f"☀️ Day {session.round}", description=f"Morning arrives. Here are the events from last night:\n\n{death_txt}", color=COLORS['day'])
-        await self._announce(session, embed)
         
-        session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
-        if session_id:
+        if not session.is_web_focused and not resume:
+            await self._announce(session, embed)
+        
+        session_id = session.session_id
+        if session_id and not resume:
+            msg = f"Morning reveals the night's events.\n{death_txt}"
             await self._broadcast_event(session_id, "phase_change", {
                 "phase": "day",
                 "round": session.round,
-                "message": f"Morning reveals the night's events.\n{death_txt}"
+                "message": msg
             })
             self._persist_session(session_id)
 
@@ -656,15 +762,26 @@ class MafiaCog(commands.Cog):
             await self._end_game(session, winner)
             return
 
+        # Only show Discord voting if not web-focused
+        vote_msg = None
         channel = self.bot.get_channel(session.channel_id)
-        p_list = [discord.SelectOption(label=p.display_name, value=str(p.user_id)) for p in session.players.values() if p.alive]
-        view = VoteView(self, session, p_list)
-        vote_msg = await channel.send("🗳️ **Discussion phase (60s).** Use the menu below to cast your lynch vote.", view=view)
-        await asyncio.sleep(60)
-        view.stop()
-        for item in view.children: item.disabled = True
-        try: await vote_msg.edit(view=view)
-        except Exception: pass
+        if not session.is_web_focused and channel:
+            p_list = [discord.SelectOption(label=p.display_name, value=str(p.user_id)) for p in session.players.values() if p.alive]
+            view = VoteView(self, session, p_list)
+            vote_msg = await channel.send("🗳️ **Discussion phase (remaining time).** Use the menu below to cast your lynch vote.", view=view)
+        
+        remaining = max(0, session.phase_end_time - time.time())
+        await asyncio.sleep(remaining)
+        
+        if vote_msg:
+            try:
+                # Disable the view in Discord
+                # Bug 11: View.from_message doesn't exist. Use the view reference directly.
+                view.stop()
+                for item in view.children:
+                    item.disabled = True
+                await vote_msg.edit(view=view)
+            except Exception: pass
 
         v_counts: Dict[int, int] = {}
         for target_id in session.day_votes.values():
@@ -693,7 +810,12 @@ class MafiaCog(commands.Cog):
                 await self._end_game(session, "jester")
                 return
         else:
-            await channel.send("⚖️ No majority reached. No one is lynched today.")
+            if channel and not session.is_web_focused:
+                await channel.send("⚖️ No majority reached. No one is lynched today.")
+
+        # Bug 9: Guard against double end_game
+        if session.phase == "ended":
+            return
 
         winner, reason = self._check_winner(session)
         if winner: await self._end_game(session, winner)
@@ -706,20 +828,30 @@ class MafiaCog(commands.Cog):
         if not mafia:
             return "town", "All Mafia members have been eliminated!"
         
-        # Bug 5: Parity against ALL non-mafia
-        non_mafia = [p for p in alive if p.team != "mafia"]
-        if len(mafia) >= len(non_mafia):
+        # Bug 14: Only count true town members for parity
+        town_only = [p for p in alive if p.team == "town"]
+        if len(mafia) >= len(town_only):
             return "mafia", "Mafia has reached parity and taken control of the town!"
             
         return None, ""
 
     async def _end_game(self, session: GameSession, winner: str):
         session.phase = "ended"
-        if winner == "town": title, color = "🏆 Town Wins!", COLORS['town_win']; desc = "All Mafia members have been eliminated."
-        elif winner == "mafia": title, color = "🩸 Mafia Wins!", COLORS['mafia_win']; desc = "The Mafia has successfully taken control."
-        else: j_name = session.players[session.jester_won_id].display_name; title, color = "🃏 Jester Wins!", COLORS['jester_win']; desc = f"**{j_name}** has been lynched and wins the game!"
+        # Bug 3: Proper winner layout and jester name handling
+        if winner == "town":
+            title, color, desc = "🏆 Town Wins!", COLORS['town_win'], "All Mafia members have been eliminated."
+        elif winner == "mafia":
+            title, color, desc = "🩸 Mafia Wins!", COLORS['mafia_win'], "The Mafia has successfully taken control."
+        else:
+            if session.jester_won_id and session.jester_won_id in session.players:
+                j_name = session.players[session.jester_won_id].display_name
+            else:
+                j_name = "Unknown"
+            title, color = "🃏 Jester Wins!", COLORS['jester_win']
+            desc = f"**{j_name}** has been lynched and wins the game!"
         
-        session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+        # Bug 5: Use session.session_id
+        session_id = session.session_id
         if session_id:
             await self._broadcast_event(session_id, "game_over", {"winner": winner, "reason": desc, "roles": {p.user_id: p.role for p in session.players.values()}})
             self._persist_session(session_id)
@@ -744,7 +876,7 @@ class MafiaCog(commands.Cog):
                 p.alive = False
                 channel = self.bot.get_channel(session.channel_id)
                 if channel: await channel.send(f"⚠️ **{member.display_name}** has left the server and is now dead.")
-                session_id = next((k for k, v in _web_sessions.items() if v == member.guild.id), None)
+                session_id = session.session_id
                 if session_id:
                     self._persist_session(session_id)
                     await self._broadcast_event(session_id, "player_died", {"player_id": member.id, "nickname": member.display_name, "role_revealed": p.role, "cause": "Left the server"})
@@ -786,7 +918,7 @@ class MafiaCog(commands.Cog):
                 conn.commit()
                 conn.close()
             except Exception as e:
-                log.error(f"Failed to persist mafia session {session_id}: {e}")
+                log.error(f"Failed to persist mafia session {session_id}: {e}", exc_info=True)
         asyncio.create_task(_do_save())
 
     def _session_to_dict(self, session: GameSession) -> dict:
@@ -798,19 +930,27 @@ class MafiaCog(commands.Cog):
             "players": {str(k): asdict(v) for k, v in session.players.items()},
             "phase": session.phase,
             "round": session.round,
-            "night_actions": session.night_actions,
+            "night_actions": {str(k): v for k, v in session.night_actions.items()},
             "mafia_votes": {str(k): v for k, v in session.mafia_votes.items()},
             "day_votes": {str(k): v for k, v in session.day_votes.items()},
             "jester_won_id": session.jester_won_id,
             "start_votes": list(session.start_votes),
-            "lobby_message_id": session.lobby_message_id
+            "lobby_message_id": session.lobby_message_id,
+            "is_web_focused": session.is_web_focused,
+            "start_time": session.start_time,
+            "phase_end_time": session.phase_end_time,
+            "session_id": session.session_id
         }
 
     def _session_from_dict(self, data: dict) -> GameSession:
         """Restores GameSession from dict."""
         players = {}
+        from dataclasses import fields
+        valid_player_fields = {f.name for f in fields(Player)}
         for pid, pdata in data.get("players", {}).items():
-            players[int(pid)] = Player(**pdata)
+            # Bug 1: Safe field unpacking for Player
+            filtered_pdata = {k: v for k, v in pdata.items() if k in valid_player_fields}
+            players[int(pid)] = Player(**filtered_pdata)
         
         return GameSession(
             guild_id=data["guild_id"],
@@ -819,12 +959,16 @@ class MafiaCog(commands.Cog):
             players=players,
             phase=data["phase"],
             round=data["round"],
-            night_actions=data.get("night_actions", {}),
+            night_actions={int(k): v for k, v in data.get("night_actions", {}).items()},
             mafia_votes={int(k): v for k, v in data.get("mafia_votes", {}).items()},
             day_votes={int(k): v for k, v in data.get("day_votes", {}).items()},
             jester_won_id=data.get("jester_won_id"),
             start_votes=set(data.get("start_votes", [])),
-            lobby_message_id=data.get("lobby_message_id")
+            lobby_message_id=data.get("lobby_message_id"),
+            is_web_focused=data.get("is_web_focused", False),
+            start_time=data.get("start_time", 0.0),
+            phase_end_time=data.get("phase_end_time", 0.0),
+            session_id=data.get("session_id")
         )
 
     def _get_game_url(self, session_id: str) -> str:
