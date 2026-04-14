@@ -289,12 +289,12 @@ class Games(commands.Cog):
         )
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="leaderboard", description="View game leaderboards")
+    @app_commands.command(name="topgames", description="View game leaderboards")
     @app_commands.choices(game=[
         app_commands.Choice(name="Minesweeper", value="minesweeper"),
         app_commands.Choice(name="Russian Roulette", value="roulette")
     ])
-    async def leaderboard(self, interaction: discord.Interaction, game: str):
+    async def topgames(self, interaction: discord.Interaction, game: str):
         db = get_db()
         embed = discord.Embed(title=f"{game.capitalize()} Leaderboard", color=discord.Color.blue())
         
