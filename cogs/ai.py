@@ -141,52 +141,130 @@ class AI(commands.Cog, name="AI"):
             log.error(f"Failed to load auto_web settings from Supabase: {e}")
 
     async def _generate_with_fallback(self, contents, config=None, is_main_chat=False):
-        """Attempts generation with 3.0-flash. If quota exhausted, rotates API keys. If all fail, falls back to 3.1-flash-lite."""
-        model_name = 'gemini-3.1-flash-lite-preview' if is_main_chat else 'gemini-3-flash-preview'
-        
-        # Consolidate all available clients into one pool for rotation
+        """Multi-tier model fallback with key rotation and 503 backoff.
+
+        Normal operation:
+          - Chat (is_main_chat=True):  gemini-2.5-flash-lite-preview
+          - Search / other:            gemini-2.5-flash-preview
+
+        Per-key strategy (chat path only):
+          1. Try primary (lite-preview) with 503 backoff.
+          2. If primary fails (429 or 503 exhausted), do ONE quick attempt on
+             secondary (flash-preview) on the same key — exits immediately on a
+             new 429, no extra retries, so no additional rate-limit pressure.
+          3. Rotate to the next key.
+
+        When all keys are exhausted, walk the fallback model chain:
+          gemini-2.5-flash → gemini-2.5-flash-lite →
+          gemma-4-31b-it (config stripped) → gemma-4-26b-a4b-it (config stripped)
+        """
+        # --- Model configuration ---
+        primary_model   = 'gemini-2.5-flash-lite-preview' if is_main_chat else 'gemini-2.5-flash-preview'
+        secondary_model = 'gemini-2.5-flash-preview'       if is_main_chat else None  # chat-path only
+
+        FALLBACK_CHAIN = [
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
+            'gemma-4-31b-it',
+            'gemma-4-26b-a4b-it',
+        ]
+
+        # 503 backoff delays in seconds (between retries on the same key)
+        backoff_delays = [5, 15, 30]
+
+        # --- Build client pool ---
         clients = self.primary_clients + ([self.fallback_client] if self.fallback_client else [])
         if not clients:
             log.error("No Gemini clients available for generation.")
             return None
-            
-        max_attempts = len(clients)
-        
-        for attempt in range(max_attempts):
-            # Ensure index is always within bounds of the CURRENT pool
-            idx = self.current_client_idx % len(clients)
-            assigned_client = clients[idx]
-            
-            try:
-                return await asyncio.to_thread(
-                    assigned_client.models.generate_content,
-                    model=model_name,
-                    contents=contents,
-                    config=config
-                )
-            except Exception as e:
-                err_str = str(e).lower()
-                if "429" in err_str or "exhausted" in err_str or "quota" in err_str:
-                    if attempt < max_attempts - 1:
-                        # Rotate to next client in the pool
-                        self.current_client_idx = (idx + 1) % len(clients)
-                        log.warning(f"API key {idx+1} rate limited. Switching to next available key...")
-                        continue
-                    else:
-                        # If we were using 3.0-flash and all keys failed, try 3.1-flash-lite as absolute last resort
-                        if model_name == 'gemini-3-flash-preview':
-                            log.warning("All keys rate limited for 3.0-flash. Falling back to 3.1-flash-lite.")
-                            try:
-                                return await asyncio.to_thread(
-                                    assigned_client.models.generate_content,
-                                    model='gemini-3.1-flash-lite-preview',
-                                    contents=contents,
-                                    config=config
-                                )
-                            except Exception as e2:
-                                raise e2
-                        raise e
-                raise e
+
+        # ------------------------------------------------------------------
+        # Inner helper: one model call with 503 exponential backoff.
+        # Returns (result, exc):
+        #   - (result, None)  on success
+        #   - (None,   exc)   on failure — exc tells the caller WHY it failed
+        # Exits immediately on 429/quota (no point retrying with same key).
+        # Exits immediately on unknown errors so they propagate up.
+        # ------------------------------------------------------------------
+        async def _attempt(client, model, cfg):
+            last_exc = None
+            for i, delay in enumerate([0] + backoff_delays):
+                if delay > 0:
+                    log.warning(f"503 on '{model}' (retry {i}/{len(backoff_delays)}). Waiting {delay}s...")
+                    await asyncio.sleep(delay)
+                try:
+                    result = await asyncio.to_thread(
+                        client.models.generate_content,
+                        model=model, contents=contents, config=cfg
+                    )
+                    return result, None
+                except Exception as e:
+                    last_exc = e
+                    err_str = str(e).lower()
+                    if "503" in err_str or "unavailable" in err_str:
+                        continue          # backoff and retry
+                    return None, e        # 429 or hard error — stop immediately
+            return None, last_exc         # 503 exhausted all retries
+
+        def _is_retryable(exc) -> bool:
+            """True for quota / overload errors. False for hard API errors."""
+            s = str(exc).lower()
+            return any(k in s for k in ("429", "exhausted", "quota", "503", "unavailable"))
+
+        # ------------------------------------------------------------------
+        # Main key-rotation loop
+        # ------------------------------------------------------------------
+        last_exc = None
+        max_key_attempts = len(clients)
+
+        for attempt in range(max_key_attempts):
+            idx    = self.current_client_idx % len(clients)
+            client = clients[idx]
+
+            # Step 1 — try primary model
+            result, exc = await _attempt(client, primary_model, config)
+            if result:
+                return result
+
+            last_exc = exc
+            if not _is_retryable(exc):
+                raise exc   # hard API error — surface to caller immediately
+
+            log.warning(f"Key {idx+1}: '{primary_model}' failed ({exc.__class__.__name__}). "
+                        f"{'Trying secondary...' if secondary_model else 'Rotating key...'}")
+
+            # Step 2 (chat only) — one quick shot at secondary on the same key.
+            # _attempt returns immediately on a new 429, so no extra delay is added.
+            if secondary_model:
+                result, exc2 = await _attempt(client, secondary_model, config)
+                if result:
+                    return result
+                last_exc = exc2
+                if not _is_retryable(exc2):
+                    raise exc2
+                log.warning(f"Key {idx+1}: '{secondary_model}' also failed ({exc2.__class__.__name__}). Rotating key...")
+
+            # Step 3 — rotate to the next key
+            if attempt < max_key_attempts - 1:
+                self.current_client_idx = (idx + 1) % len(clients)
+
+        # ------------------------------------------------------------------
+        # All keys exhausted — walk the fallback model chain
+        # ------------------------------------------------------------------
+        log.warning(f"All {max_key_attempts} API key(s) exhausted. Walking fallback model chain...")
+        # Use the last client in the pool
+        last_client = clients[self.current_client_idx % len(clients)]
+
+        for fb_model in FALLBACK_CHAIN:
+            log.warning(f"  → Trying '{fb_model}'")
+            result, exc = await _attempt(last_client, fb_model, config)
+            if result:
+                return result
+            last_exc = exc
+            log.warning(f"  → '{fb_model}' failed: {exc}")
+
+        log.error("All models and fallback chain exhausted.")
+        raise last_exc
 
     def _save_web_mode(self, entity_id: int, entity_type: str, enable: bool):
         try:
@@ -588,7 +666,7 @@ class AI(commands.Cog, name="AI"):
                     return
                 response = await asyncio.to_thread(
                     assigned_client.models.generate_content,
-                    model='gemini-3.1-flash-lite-preview',
+                    model='gemini-2.0-flash-lite',
                     contents=clean_prompt,
                     config=config
                 )
