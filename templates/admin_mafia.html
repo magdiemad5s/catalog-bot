@@ -76,6 +76,10 @@
                             <input type="text" name="base_url" value="{{ base_url }}" placeholder="http://catalogcore.com">
                         </div>
                         <div class="form-group">
+                            <label>Web Port</label>
+                            <input type="text" name="mafia_web_port" value="{{ mafia_web_port }}" placeholder="8080">
+                        </div>
+                        <div class="form-group">
                             <label>Max Players per Game</label>
                             <input type="number" name="max_players" value="{{ max_players }}">
                         </div>
@@ -162,6 +166,7 @@
             const formData = new FormData(e.target);
             const data = {
                 base_url: formData.get('base_url'),
+                mafia_web_port: formData.get('mafia_web_port'),
                 max_players: formData.get('max_players'),
                 night_duration: formData.get('night_duration'),
                 day_duration: formData.get('day_duration'),

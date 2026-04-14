@@ -270,8 +270,11 @@
             </div>
 
             <div id="lobby-wait" style="text-align: center;">
-                <h2 style="font-size: 2rem; margin-bottom: 10px;">Waiting for Night...</h2>
-                <p id="lobby-status">Waiting for more players to join in Discord.</p>
+                <h2 style="font-size: 2rem; margin-bottom: 10px;">Lobby</h2>
+                <p id="lobby-status" style="margin-bottom: 20px;">Waiting for players (min 5)...</p>
+                <button id="btn-vote-start" class="btn-save" style="max-width: 250px; margin: 0 auto; display: none;">
+                    Vote to Start (0/0)
+                </button>
             </div>
         </section>
 
@@ -450,6 +453,8 @@
                     addLog(data.message);
                     if (data.phase === 'night') playDrone();
                     if (data.phase === 'day') playSweep();
+                    // Hide lobby UI if game started
+                    if (data.phase !== 'lobby') document.getElementById('lobby-wait').classList.add('hidden');
                     break;
                 case 'player_died':
                     addLog(`${data.nickname} died (${data.cause}). They were ${data.role_revealed}.`);
@@ -457,7 +462,11 @@
                     showParchment(`${data.nickname} has met their end. Role: ${data.role_revealed}`);
                     break;
                 case 'vote_update':
-                    updateTension(data.votes);
+                    if (data.type === 'start_vote') {
+                        updateStartVoteUI(data.count, data.threshold);
+                    } else {
+                        updateTension(data.votes);
+                    }
                     playClick();
                     break;
                 case 'chat_message':
@@ -490,16 +499,35 @@
                     <div class="player-avatar" style="background: ${color}">${initials}</div>
                     <div class="player-meta">
                         <div class="player-name">${p.display_name} ${p.user_id == myId ? '(You)' : ''}</div>
-                        <div class="player-role">${p.role}</div>
+                        <div class="player-role">${state.phase === 'lobby' ? 'Waiting...' : p.role}</div>
                     </div>
                 `;
                 list.appendChild(card);
             });
-            document.getElementById('player-count').innerText = `(${aliveCount})`;
+            document.getElementById('player-count').innerText = `(${Object.keys(state.players).length})`;
 
             // Active UI components
             const me = state.players[myId];
-            if (state.phase !== 'lobby') {
+            if (state.phase === 'lobby') {
+                const count = Object.keys(state.players).length;
+                const threshold = Math.ceil(count * 0.75);
+                const votedCount = state.start_votes ? state.start_votes.length : 0;
+                updateStartVoteUI(votedCount, threshold);
+                
+                if (count >= 5) {
+                    const btn = document.getElementById('btn-vote-start');
+                    btn.style.display = 'block';
+                    if (state.start_votes && state.start_votes.includes(parseInt(myId))) {
+                        btn.innerText = `Voted to Start (${votedCount}/${threshold})`;
+                        btn.disabled = true;
+                        btn.style.opacity = 0.6;
+                    } else {
+                        btn.innerText = `Vote to Start (${votedCount}/${threshold})`;
+                        btn.disabled = false;
+                        btn.style.opacity = 1;
+                    }
+                }
+            } else {
                 document.getElementById('lobby-wait').classList.add('hidden');
                 document.getElementById('round-info').innerText = `Round ${state.round}`;
                 document.getElementById('round-info').classList.remove('hidden');
@@ -566,6 +594,29 @@
                 setTimeout(() => overlay.classList.add('hidden'), 500);
             }, 8000);
         }
+
+        function updateStartVoteUI(count, threshold) {
+            const btn = document.getElementById('btn-vote-start');
+            if (gameState && gameState.phase === 'lobby') {
+                if (Object.keys(gameState.players).length >= 5) {
+                    btn.style.display = 'block';
+                    btn.innerText = `Vote to Start (${count}/${threshold})`;
+                }
+            }
+        }
+        
+        document.getElementById('btn-vote-start').onclick = async () => {
+            const res = await fetch(`${apiBase}/mafia/${sessionId}/vote_start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_id: myId })
+            });
+            if (res.ok) {
+                document.getElementById('btn-vote-start').disabled = true;
+                document.getElementById('btn-vote-start').style.opacity = 0.6;
+                addLog("You voted to start the game.");
+            }
+        };
 
         /* --- UTILS --- */
         function jsonStr(obj) { return JSON.stringify(obj); }

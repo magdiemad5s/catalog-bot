@@ -74,6 +74,7 @@ class GameSession:
     jester_won_id: Optional[int] = None
     lobby_message_id: Optional[int] = None
     task: Optional[asyncio.Task] = None
+    start_votes: Set[int] = field(default_factory=set)
 
 # --- SESSION STORE ---
 # These are kept at module level for shared access, but managed by the Cog
@@ -85,10 +86,14 @@ _ws_clients: Dict[str, set] = {} # session_id -> set of WebSocketResponse
 # --- UI VIEWS ---
 
 class LobbyView(discord.ui.View):
-    def __init__(self, cog: 'MafiaCog', guild_id: int):
+    def __init__(self, cog: 'MafiaCog', guild_id: int, session_id: Optional[str] = None):
         super().__init__(timeout=None)
         self.cog = cog
         self.guild_id = guild_id
+        
+        if session_id:
+            url = self.cog._get_game_url(session_id)
+            self.add_item(discord.ui.Button(label="Play in Browser", style=discord.ButtonStyle.link, url=url))
 
     @discord.ui.button(label="Join Game", style=discord.ButtonStyle.success, custom_id="mafia_join")
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -98,6 +103,10 @@ class LobbyView(discord.ui.View):
         
         if interaction.user.id in session.players:
             return await interaction.response.send_message("Already joined!", ephemeral=True)
+        
+        # Check for duplicate nickname
+        if any(p.display_name.lower() == interaction.user.display_name.lower() for p in session.players.values()):
+            return await interaction.response.send_message("A player with this name is already in the game!", ephemeral=True)
         
         session.players[interaction.user.id] = Player(interaction.user.id, interaction.user.display_name)
         await interaction.response.send_message(f"Joined the game! ({len(session.players)} players)", ephemeral=True)
@@ -293,8 +302,11 @@ class MafiaCog(commands.Cog):
             session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name)
             _sessions[ctx.guild.id] = session
             
+            # Check for existing web session
+            session_id = next((k for k, v in _web_sessions.items() if v == ctx.guild.id), None)
+            
             embed = self._make_lobby_embed(session)
-            view = LobbyView(self, ctx.guild.id)
+            view = LobbyView(self, ctx.guild.id, session_id)
             msg = await ctx.send(embed=embed, view=view)
             session.lobby_message_id = msg.id
         
@@ -305,11 +317,8 @@ class MafiaCog(commands.Cog):
             _web_sessions[session_id] = ctx.guild.id
             _rejoin_tokens[session_id] = {}
 
-        # Fetch base URL from SQLite (with fallback)
         from db.local_db import get_config
-        base_url = get_config("base_url", "http://localhost:8080")
-            
-        game_url = f"{base_url.rstrip('/')}/mafia/{session_id}"
+        game_url = self._get_game_url(session_id)
         
         embed = discord.Embed(
             title="🃏 Mafia Web Link Generated",
@@ -322,6 +331,7 @@ class MafiaCog(commands.Cog):
         
         await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
         self._persist_session(session_id)
+        await self._update_lobby_embed(session)
 
     @mafia.command(name="start", description="Open a new Mafia lobby.")
     async def mafia_start(self, ctx: commands.Context):
@@ -332,10 +342,14 @@ class MafiaCog(commands.Cog):
         session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name)
         _sessions[ctx.guild.id] = session
         
+        # Check for existing web session
+        session_id = next((k for k, v in _web_sessions.items() if v == ctx.guild.id), None)
+        
         embed = self._make_lobby_embed(session)
-        view = LobbyView(self, ctx.guild.id)
+        view = LobbyView(self, ctx.guild.id, session_id)
         msg = await ctx.send(embed=embed, view=view)
         session.lobby_message_id = msg.id
+        self._persist_session(session_id) if session_id else None
 
     @mafia.command(name="join", description="Join the current Mafia lobby.")
     async def mafia_join(self, ctx: commands.Context):
@@ -345,6 +359,10 @@ class MafiaCog(commands.Cog):
         
         if ctx.author.id in session.players:
             return await ctx.send("You're already in!", ephemeral=True)
+        
+        # Check for duplicate nickname
+        if any(p.display_name.lower() == ctx.author.display_name.lower() for p in session.players.values()):
+            return await ctx.send("A player with this name is already in the game!", ephemeral=True)
         
         session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name)
         await ctx.send("Joined the mafia lobby!", ephemeral=True)
@@ -423,6 +441,43 @@ class MafiaCog(commands.Cog):
 
         if guild_id in _sessions: del _sessions[guild_id]
 
+    async def _handle_start_vote(self, session: GameSession, player_id: int):
+        """Handles a 'Vote to Start' from the web UI."""
+        if session.phase != "lobby": return
+        session.start_votes.add(player_id)
+        
+        count = len(session.players)
+        votes = len(session.start_votes)
+        import math
+        threshold = math.ceil(count * 0.75)
+        
+        if votes >= threshold and count >= 5:
+            # Start game
+            session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+            if session_id:
+                await self._broadcast_event(session_id, "chat_message", {
+                    "sender_id": 0,
+                    "nickname": "System",
+                    "text": "🛡️ 75% Majority reached! Assigning roles and starting the game...",
+                    "timestamp": int(asyncio.get_running_loop().time())
+                })
+            
+            await self._assign_roles(session)
+            for p in session.players.values():
+                await self._send_role_dm(p)
+                
+            session.task = asyncio.create_task(self._game_loop(session))
+        else:
+            # Just broadcast update
+            session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
+            if session_id:
+                asyncio.create_task(self._broadcast_event(session_id, "vote_update", {
+                    "type": "start_vote",
+                    "count": votes,
+                    "threshold": threshold
+                }))
+                self._persist_session(session_id)
+
     # --- INTERNAL HELPERS ---
 
     async def _update_lobby_embed(self, session: GameSession):
@@ -432,8 +487,9 @@ class MafiaCog(commands.Cog):
         if not channel:
             return
         try:
+            session_id = next((k for k, v in _web_sessions.items() if v == session.guild_id), None)
             msg = await channel.fetch_message(session.lobby_message_id)
-            await msg.edit(embed=self._make_lobby_embed(session))
+            await msg.edit(embed=self._make_lobby_embed(session), view=LobbyView(self, session.guild_id, session_id))
         except Exception:
             pass
 
@@ -841,6 +897,8 @@ class MafiaCog(commands.Cog):
         # Exclude task and message_id
         if "task" in data: del data["task"]
         if "lobby_message_id" in data: del data["lobby_message_id"]
+        # Convert set to list
+        if "start_votes" in data: data["start_votes"] = list(data["start_votes"])
         return data
 
     def _session_from_dict(self, data: dict) -> GameSession:
@@ -859,8 +917,22 @@ class MafiaCog(commands.Cog):
             night_actions=data.get("night_actions", {}),
             mafia_votes={int(k): v for k, v in data.get("mafia_votes", {}).items()},
             day_votes={int(k): v for k, v in data.get("day_votes", {}).items()},
-            jester_won_id=data.get("jester_won_id")
+            jester_won_id=data.get("jester_won_id"),
+            start_votes=set(data.get("start_votes", []))
         )
+
+    def _get_game_url(self, session_id: str) -> str:
+        """Constructs the game URL based on base_url and optional web_port."""
+        from db.local_db import get_config
+        base_url = get_config("base_url", "http://localhost").rstrip("/")
+        web_port = get_config("mafia_web_port", "").strip()
+        
+        if web_port and web_port not in ["80", "443"]:
+            # Check if base_url already has a port
+            if ":" not in base_url.replace("://", ""):
+                base_url = f"{base_url}:{web_port}"
+        
+        return f"{base_url}/mafia/{session_id}"
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MafiaCog(bot))

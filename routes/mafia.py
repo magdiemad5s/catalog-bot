@@ -49,12 +49,11 @@ async def mafia_state(request):
     
     state = cog._session_to_dict(session)
     
-    # Hide roles if not spectator or dead
-    if not is_spectator:
+    # Hide roles if not spectator or dead, and ONLY if the game has started
+    if not is_spectator and session.phase != "lobby":
         p_id = int(player_id)
         player = session.players.get(p_id)
         if player and player.alive:
-            # Hide other roles
             for pid, pdata in state['players'].items():
                 if int(pid) != p_id:
                     # Mafia see other mafia
@@ -62,6 +61,11 @@ async def mafia_state(request):
                         continue
                     pdata['role'] = "???"
                     pdata['team'] = "???"
+    elif session.phase == "lobby":
+        # In lobby, hide actual roles (since they default to Villager but aren't assigned)
+        for pdata in state['players'].values():
+            pdata['role'] = "Lobby"
+            pdata['team'] = "Lobby"
     
     return web.json_response(state)
 
@@ -89,8 +93,13 @@ async def mafia_join(request):
     
     # Add to session if lobby
     if session.phase == "lobby":
-        if int(user_id) not in session.players:
-            session.players[int(user_id)] = Player(int(user_id), nickname)
+        user_id_int = int(user_id)
+        if user_id_int not in session.players:
+            # Check for duplicate nickname
+            if any(p.display_name.lower() == nickname.lower() for p in session.players.values()):
+                return web.json_response({"error": "This nickname is already taken!"}, status=400)
+            
+            session.players[user_id_int] = Player(user_id_int, nickname)
             # Update Discord embed
             cog = request.app['bot'].get_cog("MafiaCog")
             if cog:
@@ -101,6 +110,22 @@ async def mafia_join(request):
                 }))
     
     return web.json_response({"token": token, "player_id": int(user_id)})
+
+@mafia_routes.post('/mafia/{session_id}/vote_start')
+async def mafia_vote_start(request):
+    """Player votes to start the game."""
+    session, session_id = get_session_and_id(request)
+    if not session or session.phase != "lobby":
+        return web.json_response({"error": "Invalid session state"}, status=400)
+    
+    data = await request.json()
+    player_id = data.get('player_id')
+    
+    cog = request.app['bot'].get_cog("MafiaCog")
+    if cog:
+        await cog._handle_start_vote(session, int(player_id))
+    
+    return web.json_response({"status": "voted"})
 
 @mafia_routes.post('/mafia/{session_id}/action')
 async def mafia_action(request):
