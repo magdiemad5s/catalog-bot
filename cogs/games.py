@@ -117,11 +117,25 @@ class MinesweeperView(discord.ui.View):
         for btn in self.children:
             btn.disabled = True
             
+        base_points = {"easy": 100, "medium": 300, "hard": 600}
+        base_xp = base_points.get(self.difficulty, 100) // 2 
         score = 0
+        
         if won:
-            base_points = {"easy": 100, "medium": 300, "hard": 600}
             time_bonus = max(1.0, 2.0 - (duration / 300)) # Faster is better, min 1x
             score = int(base_points.get(self.difficulty, 100) * time_bonus)
+            xp_reward = base_xp * 2  # Double XP for winning!
+        else:
+            xp_reward = base_xp
+            
+        # Grant XP
+        try:
+            db = get_db()
+            res = db.table("xp_profiles").select("xp").eq("user_id", self.user_id).execute()
+            if res.data:
+                db.table("xp_profiles").update({"xp": res.data[0]['xp'] + xp_reward}).eq("user_id", self.user_id).execute()
+        except Exception as e:
+            log.error(f"Failed to grant XP: {e}")
             
         # Save to DB
         try:
@@ -136,7 +150,7 @@ class MinesweeperView(discord.ui.View):
         except Exception as e:
             log.error(f"Failed to save minesweeper score: {e}")
 
-        msg = f"🎉 **You Won!** Score: {score}" if won else "💥 **BOOM!** Game Over."
+        msg = f"🎉 **You Won!**\nScore: {score} pts\nReward: +**{xp_reward} XP** (DOUBLE!)" if won else f"💥 **BOOM!** Game Over.\nReward: +**{xp_reward} XP**"
         embed = discord.Embed(title="Minesweeper", description=msg, color=discord.Color.green() if won else discord.Color.red())
         embed.set_footer(text=f"Time: {int(duration)}s | Difficulty: {self.difficulty.capitalize()}")
         
