@@ -30,36 +30,12 @@ class Welcome(commands.Cog, name="Welcome"):
         settings = load_settings()
         self.welcoming_enabled = settings.get("welcome_enabled", True)
         
-        self.primary_clients = []
-        self.fallback_client = None
-        self.current_client_idx = 0
-        
-        # Setup API Keys for Gemini
-        key1 = getattr(self.bot.config, "gemini_api_key", None)
-        key2 = getattr(self.bot.config, "gemini_api_key_2", None)
-        key3 = getattr(self.bot.config, "gemini_api_key_3", None)
-        
-        try:
-            if key1: self.primary_clients.append(genai.Client(api_key=key1))
-            if key2: self.primary_clients.append(genai.Client(api_key=key2))
-            if key3: self.fallback_client = genai.Client(api_key=key3)
-        except Exception as e:
-            log.error(f"Failed to load keys in Welcome Cog: {e}")
-
         # Start the queue worker when the cog is fully loaded
         self.worker_task = None
 
     async def cog_load(self):
         """Start background worker after cog is fully loaded (avoids deprecated bot.loop in __init__)."""
         self.worker_task = asyncio.create_task(self.join_worker())
-
-    def get_client(self):
-        """Round-robins the primary keys, or yields the fallback."""
-        if not self.primary_clients:
-            return self.fallback_client
-        client = self.primary_clients[self.current_client_idx]
-        self.current_client_idx = (self.current_client_idx + 1) % len(self.primary_clients)
-        return client
 
     async def cog_unload(self):
         """Cleanup worker on unload."""
@@ -180,18 +156,18 @@ class Welcome(commands.Cog, name="Welcome"):
 
         try:
             async with message.channel.typing():
-                assigned_client = self.get_client()
-                if not assigned_client:
+                ai_cog = self.bot.get_cog("AI")
+                if not ai_cog:
                     await message.reply("*(I'm having trouble connecting right now. Let's finish this later!)*")
                     return
                 # generate AI response
-                await self._handle_ai_interview(message, assigned_client)
+                await self._handle_ai_interview(message, ai_cog)
                 
         except Exception as e:
             log.error(f"Error in welcome AI handling: {e}")
             await message.reply("*(I hit a snag. Care to repeat that?)*")
 
-    async def _handle_ai_interview(self, message: discord.Message, client):
+    async def _handle_ai_interview(self, message: discord.Message, ai_cog):
         user_id = message.author.id
         
         system_instruction = (
@@ -240,35 +216,7 @@ class Welcome(commands.Cog, name="Welcome"):
 
         history = self.active_onboarding[user_id]
         
-        # Max retries setup (similar to ai.py failover)
-        retry_attempts = 2
-        response = None
-        assigned_client = client
-
-        while retry_attempts > 0:
-            try:
-                response = await asyncio.to_thread(
-                    assigned_client.models.generate_content,
-                    model='gemini-3.1-flash-lite-preview',
-                    contents=history,
-                    config=config
-                )
-                break
-            except Exception as e:
-                error_str = str(e)
-                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    log.warning(f"Welcome AI rate limited! Attempting fallback. {e}")
-                    retry_attempts -= 1
-                    if retry_attempts > 0:
-                        await asyncio.sleep(4)
-                        if self.fallback_client and assigned_client != self.fallback_client:
-                            assigned_client = self.fallback_client
-                        else:
-                            assigned_client = self.get_client()
-                    else:
-                        raise e
-                else:
-                    raise e
+        response = await ai_cog._generate_with_fallback(contents=history, config=config, is_main_chat=True)
                     
         if not response:
             raise Exception("No response generated.")
