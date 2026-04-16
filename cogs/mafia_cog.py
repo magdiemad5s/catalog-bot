@@ -252,6 +252,10 @@ class MafiaCog(commands.Cog):
                 # Bug 7: Ensure session_id is authoritative from DB key
                 session.session_id = session_id
                 
+                # Do not restore ended games into the active session pool
+                if session.phase == "ended":
+                    continue
+                
                 _sessions[guild_id] = session
                 _web_sessions[session_id] = guild_id
                 _rejoin_tokens[session_id] = tokens
@@ -276,6 +280,11 @@ class MafiaCog(commands.Cog):
         """Generate a unique URL for the browser-playable version of this session."""
         session = _sessions.get(ctx.guild.id)
         
+        # Clean up if the session is left over in an ended state
+        if session and session.phase == "ended":
+            await self._force_end_session(ctx.guild.id)
+            session = None
+            
         # Bug 8: Generate session_id FIRST
         session_id = session.session_id if session else None
         # Bug 10: Store session_id on session
@@ -316,8 +325,12 @@ class MafiaCog(commands.Cog):
 
     @mafia.command(name="start", description="Open a new Mafia lobby.")
     async def mafia_start(self, ctx: commands.Context):
-        if ctx.guild.id in _sessions:
-            return await ctx.send("A game is already in progress or lobby is open.", ephemeral=True)
+        session = _sessions.get(ctx.guild.id)
+        if session:
+            if session.phase == "ended":
+                await self._force_end_session(ctx.guild.id)
+            else:
+                return await ctx.send("A game is already in progress or lobby is open. If it's stuck, use !mafia reset.", ephemeral=True)
         
         session = GameSession(ctx.guild.id, ctx.channel.id, ctx.author.id)
         session.players[ctx.author.id] = Player(ctx.author.id, ctx.author.display_name[:32]) # Bug 9: Truncate nickname
