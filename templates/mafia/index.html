@@ -205,6 +205,19 @@
         
         .hidden { display: none !important; }
 
+        .mobile-ptt-btn {
+            display: none;
+            width: 100%; border-radius: 0; padding: 20px; font-size: 1.5rem; font-weight: 800;
+            background: var(--border-noir); position: fixed; bottom: 0; left: 0; z-index: 1000;
+            color: #fff; text-align: center; border: none; touch-action: none;
+        }
+        .mobile-ptt-btn.active { background: var(--accent-primary); box-shadow: 0 -4px 15px rgba(88, 101, 242, 0.4); }
+        @media (max-width: 900px) {
+            body.show-ptt .mobile-ptt-btn { display: block; }
+            body.show-ptt { padding-bottom: 70px; }
+            body.show-ptt main { padding-bottom: 70px; }
+        }
+
         /* --- Buttons --- */
         button { cursor: pointer; border: none; outline: none; font-family: inherit; transition: all 0.2s ease; }
         .btn-save {
@@ -268,6 +281,17 @@
 </head>
 <body class="phase-lobby">
 
+    <div class="overlay hidden" id="voice-prompt-overlay" style="z-index: 1001;">
+        <div class="parchment" style="text-align: center; max-width: 350px; transform: scale(1);">
+            <h3 style="margin-bottom: 10px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 5px; color: #000;">Join Voice Chat?</h3>
+            <p style="margin: 15px 0; color: #222;">Coordinate using Voice Chat!<br><br>Features Push-to-Talk via Keyboard (Hold Spacebar or 'V') or the on-screen Mobile button.</p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button class="btn-save" style="background: #3f4147;" onclick="declineVoice()">Dismiss</button>
+                <button class="btn-save" style="background: var(--accent-town); color: #000;" onclick="acceptVoice()">Join Voice</button>
+            </div>
+        </div>
+    </div>
+
     <svg class="svg-defs">
         <symbol id="icon-villager" viewBox="0 0 24 24"><path d="M12 2L1 12h3v10h16v-10h3L12 2zm0 13c-1.104 0-2-.896-2-2s.896-2 2-2 2 .896 2 2-.896 2-2 2z"/></symbol>
         <symbol id="icon-mafia" viewBox="0 0 24 24"><path d="M17.5 7L13 2v5h-2V2L6.5 7H2v15h20V7h-4.5zM12 17c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z"/></symbol>
@@ -286,6 +310,7 @@
             <span id="timer-display" class="hidden" style="background: rgba(237, 66, 69, 0.2); color: var(--accent-mafia); padding: 5px 10px; border-radius: 4px; font-weight: 800; border: 1px solid var(--accent-mafia); margin-left: 10px;">00:00</span>
         </div>
         <div class="user-meta" style="display: flex; gap: 15px; align-items: center;">
+            <span id="voice-toggle" style="cursor: pointer; color: var(--text-muted); font-size: 1.1rem; transition: color 0.3s;" onclick="promptJoinVoice()" title="Join Voice Chat"><i class="fas fa-phone-slash"></i></span>
             <span id="my-name-display" style="font-weight: 800; font-size: 0.9rem; cursor: pointer; color: var(--accent-primary);" onclick="changeName()" title="Click to change name"></span>
             <span class="mute-toggle" onclick="toggleMute()"><i class="fas fa-volume-up"></i></span>
         </div>
@@ -368,6 +393,12 @@
             <p id="death-message"></p>
         </div>
     </div>
+
+    <button id="mobile-ptt-btn" class="mobile-ptt-btn hidden" 
+        onmousedown="startPTT()" onmouseup="stopPTT()" onmouseleave="stopPTT()"
+        ontouchstart="startPTT(); event.preventDefault();" ontouchend="stopPTT(); event.preventDefault();">
+        HOLD TO TALK
+    </button>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <script>
@@ -490,9 +521,142 @@
         }
 
 
+        // WebRTC Config
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        let localStream = null;
+        let peerConnections = {}; // targetId -> RTCPeerConnection
+        let inVoice = false;
+        let isTransmitting = false;
+        let hasPromptedVoice = localStorage.getItem(`mafia_voice_prompt_${sessionId}`);
+
+        async function acceptVoice() {
+            document.getElementById('voice-prompt-overlay').classList.add('hidden');
+            localStorage.setItem(`mafia_voice_prompt_${sessionId}`, 'true');
+            hasPromptedVoice = 'true';
+            await promptJoinVoice();
+        }
+
+        function declineVoice() {
+            document.getElementById('voice-prompt-overlay').classList.add('hidden');
+            localStorage.setItem(`mafia_voice_prompt_${sessionId}`, 'true');
+            hasPromptedVoice = 'true';
+        }
+
+        async function promptJoinVoice() {
+            if (inVoice) {
+                inVoice = false;
+                ws.send(jsonStr({ type: 'voice_leave', player_id: myId, rejoin_token: myToken }));
+                Object.values(peerConnections).forEach(pc => pc.close());
+                peerConnections = {};
+                if (localStream) {
+                    localStream.getTracks().forEach(t => t.stop());
+                    localStream = null;
+                }
+                document.getElementById('voice-toggle').innerHTML = '<i class="fas fa-phone-slash"></i>';
+                document.getElementById('voice-toggle').style.color = "var(--text-muted)";
+                document.body.classList.remove('show-ptt');
+                addLog('Disconnected from Voice Chat.');
+            } else {
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    localStream.getAudioTracks().forEach(t => t.enabled = false);
+                    inVoice = true;
+                    
+                    document.getElementById('voice-toggle').innerHTML = '<i class="fas fa-phone"></i>';
+                    document.getElementById('voice-toggle').style.color = "var(--accent-town)";
+                    document.body.classList.add('show-ptt');
+                    
+                    ws.send(jsonStr({ type: 'voice_join', player_id: myId, rejoin_token: myToken }));
+                    addLog('Connected to Voice Chat. Hold Spacebar or V to speak.');
+                } catch(e) {
+                    alert("Unable to access microphone. Please check permissions!");
+                }
+            }
+        }
+        
+        function getOrCreatePeerConnection(targetId) {
+            if (peerConnections[targetId]) return peerConnections[targetId];
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnections[targetId] = pc;
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            }
+            
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    ws.send(jsonStr({ type: 'webrtc_ice', player_id: myId, rejoin_token: myToken, target_id: targetId, data: e.candidate }));
+                }
+            };
+            
+            pc.ontrack = (e) => {
+                let aud = document.getElementById(`audio-player-${targetId}`);
+                if (!aud) {
+                    aud = document.createElement('audio');
+                    aud.id = `audio-player-${targetId}`;
+                    aud.className = 'remote-audio';
+                    aud.dataset.owner = targetId;
+                    aud.autoplay = true;
+                    document.body.appendChild(aud);
+                }
+                aud.srcObject = e.streams[0];
+                updateAudioMuting();
+            };
+            return pc;
+        }
+
+        async function createWebRTCOffer(targetId) {
+            const pc = getOrCreatePeerConnection(targetId);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.send(jsonStr({ type: 'webrtc_offer', player_id: myId, rejoin_token: myToken, target_id: targetId, data: offer }));
+        }
+
+        async function handleWebRTCOffer(senderId, offer) {
+            const pc = getOrCreatePeerConnection(senderId);
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(jsonStr({ type: 'webrtc_answer', player_id: myId, rejoin_token: myToken, target_id: senderId, data: answer }));
+        }
+
+        async function handleWebRTCAnswer(senderId, answer) {
+            const pc = peerConnections[senderId];
+            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+
+        async function handleWebRTCICE(senderId, candidate) {
+            const pc = peerConnections[senderId];
+            if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+
+        function updateAudioMuting() {
+            const me = gameState?.players?.[String(myId)];
+            const am_alive = me ? me.alive : false;
+            
+            document.querySelectorAll('audio.remote-audio').forEach(aud => {
+                if (isMuted) {
+                    aud.muted = true;
+                    return;
+                }
+                const ownerId = aud.dataset.owner;
+                const owner_player = gameState?.players?.[ownerId];
+                if (am_alive && owner_player && !owner_player.alive) {
+                    // Alive cannot hear Dead
+                    aud.muted = true;
+                } else {
+                    aud.muted = false;
+                }
+            });
+        }
+
         /* --- INITIALIZATION --- */
         async function init() {
             try {
+                if (!hasPromptedVoice) {
+                    document.getElementById('voice-prompt-overlay').classList.remove('hidden');
+                }
+
                 if (!myNickname) {
                     myNickname = prompt("Enter a nickname for this session:");
                     if (!myNickname) myNickname = "Player_" + Math.floor(Math.random()*1000);
@@ -606,6 +770,26 @@
         function handleEvent(type, data) {
             console.log("Event:", type, data);
             switch(type) {
+                case 'voice_join':
+                    if (inVoice && data.player_id !== myId) createWebRTCOffer(data.player_id);
+                    break;
+                case 'voice_leave':
+                    if (peerConnections[data.player_id]) {
+                        peerConnections[data.player_id].close();
+                        delete peerConnections[data.player_id];
+                        const aud = document.getElementById(`audio-player-${data.player_id}`);
+                        if (aud) aud.remove();
+                    }
+                    break;
+                case 'webrtc_offer':
+                    if (inVoice) handleWebRTCOffer(data.sender_id, data.data);
+                    break;
+                case 'webrtc_answer':
+                    if (inVoice) handleWebRTCAnswer(data.sender_id, data.data);
+                    break;
+                case 'webrtc_ice':
+                    if (inVoice) handleWebRTCICE(data.sender_id, data.data);
+                    break;
                 case 'phase_change':
                     document.body.className = `phase-${data.phase}`;
                     document.querySelector('.phase-badge').innerText = data.phase;
@@ -760,6 +944,9 @@
                 // Spectator
                 document.querySelector('.chat-tab.ghost').classList.remove('hidden');
             }
+            
+            // Re-evaluate voice muting status based on life status
+            updateAudioMuting();
         }
 
         /* --- UI HELPERS --- */
@@ -990,6 +1177,7 @@
             if (mainGain) {
                 mainGain.gain.value = isMuted ? 0 : 0.4;
             }
+            updateAudioMuting();
         }
 
         async function changeName() {
@@ -1037,6 +1225,31 @@
                 e.target.value = "";
             }
         };
+
+        function startPTT() {
+            if (!inVoice || !localStream || isTransmitting) return;
+            localStream.getAudioTracks().forEach(t => t.enabled = true);
+            isTransmitting = true;
+            document.getElementById('mobile-ptt-btn').classList.add('active');
+        }
+        function stopPTT() {
+            if (!inVoice || !localStream || !isTransmitting) return;
+            localStream.getAudioTracks().forEach(t => t.enabled = false);
+            isTransmitting = false;
+            document.getElementById('mobile-ptt-btn').classList.remove('active');
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            if (e.target.tagName !== 'INPUT' && (e.code === 'Space' || e.code === 'KeyV')) {
+                startPTT();
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.target.tagName !== 'INPUT' && (e.code === 'Space' || e.code === 'KeyV')) {
+                stopPTT();
+            }
+        });
 
         init();
     </script>

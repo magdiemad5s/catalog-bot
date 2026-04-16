@@ -461,6 +461,44 @@ async def mafia_ws(request):
                                 
                         for _ws in to_remove: 
                             clients.remove(_ws)
+
+                elif mtype in ['voice_join', 'voice_leave']:
+                    player_id = ws.get('player_id')
+                    if not player_id: continue
+                    payload = json.dumps({
+                        "type": mtype, 
+                        "data": {"player_id": player_id}
+                    })
+                    clients = _ws_clients.get(session_id, set())
+                    to_remove = set()
+                    for _ws in clients:
+                        if _ws != ws:
+                            try: await _ws.send_str(payload)
+                            except: to_remove.add(_ws)
+                    for _ws in to_remove: clients.remove(_ws)
+
+                elif mtype in ['webrtc_offer', 'webrtc_answer', 'webrtc_ice']:
+                    sender_id = ws.get('player_id')
+                    target_id = data.get('target_id')
+                    if not sender_id or not target_id: continue
+                    
+                    payload = json.dumps({
+                        "type": mtype,
+                        "data": {
+                            "sender_id": sender_id,
+                            "data": data.get('data')
+                        }
+                    })
+                    
+                    clients = _ws_clients.get(session_id, set())
+                    to_remove = set()
+                    for _ws in clients:
+                        # Bug 8: Match strictly to target
+                        if _ws.get('player_id') == target_id:
+                            try: await _ws.send_str(payload)
+                            except: to_remove.add(_ws)
+                    for _ws in to_remove: clients.remove(_ws)
+
             
             elif msg.type == WSMsgType.ERROR:
                 log.error(f"WS connection closed with exception {ws.exception()}")
