@@ -212,6 +212,58 @@ async def mafia_leave(request):
     
     return web.json_response({"status": "left"})
 
+@mafia_routes.post('/mafia/{session_id}/change_name')
+async def mafia_change_name(request):
+    """Player changes their nickname."""
+    session, session_id = get_session_and_id(request)
+    if not session:
+        return web.json_response({"error": "Session not found"}, status=404)
+    
+    data = await request.json()
+    player_id = data.get('player_id')
+    token = data.get('rejoin_token')
+    new_name = str(data.get('nickname', '')).strip()[:32]
+    
+    if len(new_name) < 1:
+        return web.json_response({"error": "Nickname too short"}, status=400)
+        
+    try:
+        player_id_int = int(player_id)
+        if player_id_int <= 0 or player_id_int > 2**53:
+            return web.json_response({"error": "Invalid player_id"}, status=400)
+    except (TypeError, ValueError):
+        return web.json_response({"error": "Invalid player_id"}, status=400)
+        
+    stored_tokens = _rejoin_tokens.get(session_id, {})
+    if stored_tokens.get(token) != player_id_int:
+        return web.json_response({"error": "Invalid token"}, status=403)
+        
+    # Check duplicate
+    if any(p.display_name.lower() == new_name.lower() for pid, p in session.players.items() if pid != player_id_int):
+        return web.json_response({"error": "This nickname is already taken!"}, status=400)
+        
+    player = session.players.get(player_id_int)
+    if not player:
+        return web.json_response({"error": "Player not found"}, status=404)
+        
+    old_name = player.display_name
+    player.display_name = new_name
+    
+    cog = request.app['bot'].get_cog("MafiaCog")
+    if cog:
+        # If in lobby, update embed
+        if session.phase == "lobby":
+            asyncio.create_task(cog._update_lobby_embed(session))
+        # Broadcast name change
+        asyncio.create_task(cog._broadcast_event(session_id, "name_changed", {
+            "player_id": player_id_int,
+            "old_name": old_name,
+            "new_name": new_name
+        }))
+        
+    return web.json_response({"status": "ok", "nickname": new_name})
+
+
 @mafia_routes.post('/mafia/{session_id}/action')
 async def mafia_action(request):
     """Submit a night action or day vote."""

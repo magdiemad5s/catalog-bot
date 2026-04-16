@@ -285,7 +285,8 @@
             <span id="round-info" class="hidden">Round 1</span>
             <span id="timer-display" class="hidden" style="background: rgba(237, 66, 69, 0.2); color: var(--accent-mafia); padding: 5px 10px; border-radius: 4px; font-weight: 800; border: 1px solid var(--accent-mafia); margin-left: 10px;">00:00</span>
         </div>
-        <div class="user-meta">
+        <div class="user-meta" style="display: flex; gap: 15px; align-items: center;">
+            <span id="my-name-display" style="font-weight: 800; font-size: 0.9rem; cursor: pointer; color: var(--accent-primary);" onclick="changeName()" title="Click to change name"></span>
             <span class="mute-toggle" onclick="toggleMute()"><i class="fas fa-volume-up"></i></span>
         </div>
     </header>
@@ -497,6 +498,7 @@
                     if (!myNickname) myNickname = "Player_" + Math.floor(Math.random()*1000);
                     localStorage.setItem(`mafia_nickname_${window.location.hostname}`, myNickname);
                 }
+                document.getElementById('my-name-display').innerText = myNickname;
 
                 if (!myId || !myToken) {
                     // Register via API
@@ -635,6 +637,15 @@
                     break;
                 case 'game_over':
                     showParchment(`Game Over! Winner: ${data.winner.toUpperCase()}\n\n${data.reason}`);
+                    break;
+                case 'name_changed':
+                    if (String(data.player_id) === String(myId)) {
+                        myNickname = data.new_name;
+                        localStorage.setItem(`mafia_nickname_${window.location.hostname}`, myNickname);
+                        document.getElementById('my-name-display').innerText = myNickname;
+                    }
+                    addLog(`${data.old_name} is now known as ${data.new_name}.`);
+                    triggerImmediatePoll();
                     break;
             }
         }
@@ -978,6 +989,29 @@
             // Bug 2: Only touch mainGain if audio context exists
             if (mainGain) {
                 mainGain.gain.value = isMuted ? 0 : 0.4;
+            }
+        }
+
+        async function changeName() {
+            let newName = prompt("Enter new nickname:", myNickname);
+            if (!newName || newName.trim() === "" || newName === myNickname) return;
+            newName = newName.trim().substring(0, 32);
+            
+            try {
+                const res = await fetch(`${apiBase}/mafia/${sessionId}/change_name`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: myId, rejoin_token: myToken, nickname: newName })
+                });
+                
+                if (res.ok) {
+                    addLog(`Requesting name change to ${newName}...`);
+                } else {
+                    const err = await res.json();
+                    alert("Error changing name: " + (err.error || "Unknown"));
+                }
+            } catch (e) {
+                alert("Network error.");
             }
         }
 
