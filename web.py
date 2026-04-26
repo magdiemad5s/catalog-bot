@@ -128,6 +128,11 @@ async def dashboard(request):
         "rules_text": rules_text
     }
 
+@admin_routes.get("/admin/announcements")
+@aiohttp_jinja2.template("announcements.html")
+async def admin_announcements(request):
+    return {"active_page": "announcements"}
+
 @admin_routes.get("/admin/mafia")
 @aiohttp_jinja2.template("admin_mafia.html")
 async def admin_mafia(request):
@@ -255,6 +260,37 @@ async def announce_live_api(request):
         return web.json_response({"success": True})
     
     return web.json_response({"error": "Channel not found"}, status=500)
+
+@admin_routes.post("/admin/api/post_announcement")
+async def post_announcement_api(request):
+    data = await request.json()
+    bot = request.app['bot']
+    
+    title = data.get("title", "")
+    content = data.get("content", "")
+    ping_type = data.get("ping_type", "none")
+    role_id = data.get("role_id", "").strip()
+    color_hex = data.get("color", "#6366f1")
+    image_url = data.get("image_url", "").strip()
+    
+    target_channel_id = 1482736370291183759
+    channel = bot.get_channel(target_channel_id)
+    
+    if channel:
+        ping_text = ""
+        if ping_type == "everyone":
+            ping_text = "@everyone\n"
+        elif ping_type == "role" and role_id.isdigit():
+            ping_text = f"<@&{role_id}>\n"
+            
+        embed = discord.Embed(title=title, description=content, color=int(color_hex.replace("#", ""), 16))
+        if image_url:
+            embed.set_image(url=image_url)
+        
+        bot.loop.create_task(channel.send(content=ping_text.strip(), embed=embed))
+        return web.json_response({"success": True})
+    
+    return web.json_response({"error": "Channel not found. Ensure bot has access."}, status=500)
 
 @admin_routes.post("/admin/api/improve_text")
 async def improve_text_api(request):

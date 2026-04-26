@@ -1,0 +1,230 @@
+{% extends "base_admin.html" %}
+
+{% block page_title %}Server Announcements{% endblock %}
+
+{% block extra_style %}
+<style>
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    
+    .discord-preview {
+        background: #313338;
+        border-radius: 8px;
+        padding: 1rem;
+        font-family: 'gg sans', 'Inter', sans-serif;
+        color: #dbdee1;
+        min-height: 200px;
+    }
+    
+    .discord-message { display: flex; gap: 1rem; }
+    .discord-avatar {
+        width: 40px; height: 40px; border-radius: 50%;
+        background: var(--primary);
+        display: flex; align-items: center; justify-content: center;
+        font-weight: bold; font-size: 1.2rem; flex-shrink: 0;
+    }
+    .discord-content { flex-grow: 1; overflow: hidden; }
+    .discord-header { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.2rem; }
+    .discord-username { color: #f2f3f5; font-weight: 500; font-size: 1rem; }
+    .discord-timestamp { color: #949ba4; font-size: 0.75rem; }
+    
+    .discord-ping { color: #c9cdfb; background: rgba(88, 101, 242, 0.3); padding: 0 4px; border-radius: 3px; font-weight: 500; }
+    
+    .discord-embed {
+        background: #2b2d31;
+        border-left: 4px solid var(--primary);
+        border-radius: 4px;
+        padding: 0.75rem 1rem;
+        margin-top: 0.5rem;
+        max-width: 520px;
+    }
+    .discord-embed-title { color: #f2f3f5; font-weight: 600; font-size: 1rem; margin-bottom: 0.5rem; }
+    .discord-embed-desc { color: #dbdee1; font-size: 0.875rem; line-height: 1.375; white-space: pre-wrap; word-wrap: break-word;}
+    .discord-embed-desc a { color: #00a8fc; text-decoration: none; }
+    .discord-embed-desc a:hover { text-decoration: underline; }
+    
+    .discord-embed-image { margin-top: 1rem; border-radius: 4px; max-width: 100%; max-height: 300px; object-fit: contain; display: none; }
+    
+    .format-toolbar {
+        display: flex; gap: 0.5rem; margin-bottom: 0.5rem;
+        background: rgba(255,255,255,0.05); padding: 0.5rem; border-radius: 6px;
+    }
+    .format-btn {
+        background: transparent; color: var(--text); border: 1px solid var(--surface-border);
+        padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem;
+    }
+    .format-btn:hover { background: rgba(255,255,255,0.1); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <div class="card">
+        <h3><i class="fas fa-edit"></i> Compose Announcement</h3>
+        <form id="announcement_form" onsubmit="postAnnouncement(event)">
+            <label>Embed Title</label>
+            <input type="text" name="title" id="inp_title" oninput="updatePreview()" placeholder="Server Update!" required>
+            
+            <label>Announcement Content (Markdown Supported)</label>
+            <div class="format-toolbar">
+                <button type="button" class="format-btn" onclick="insertFormat('**', '**')" title="Bold"><i class="fas fa-bold"></i></button>
+                <button type="button" class="format-btn" onclick="insertFormat('*', '*')" title="Italic"><i class="fas fa-italic"></i></button>
+                <button type="button" class="format-btn" onclick="insertFormat('__', '__')" title="Underline"><i class="fas fa-underline"></i></button>
+                <button type="button" class="format-btn" onclick="insertFormat('~~', '~~')" title="Strikethrough"><i class="fas fa-strikethrough"></i></button>
+                <button type="button" class="format-btn" onclick="insertFormat('\n> ', '')" title="Quote"><i class="fas fa-quote-right"></i></button>
+                <button type="button" class="format-btn" onclick="insertFormat('```\n', '\n```')" title="Code Block"><i class="fas fa-code"></i></button>
+                <button type="button" class="format-btn" onclick="insertFormat('[Link Text](', ')')" title="Link"><i class="fas fa-link"></i></button>
+            </div>
+            <textarea name="content" id="inp_content" rows="8" oninput="updatePreview()" placeholder="Type your message here..." required></textarea>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div>
+                    <label>Embed Color</label>
+                    <input type="color" name="color" id="inp_color" value="#6366f1" oninput="updatePreview()" style="height: 40px; padding: 0.2rem;">
+                </div>
+                <div>
+                    <label>Image URL (Optional)</label>
+                    <input type="url" name="image_url" id="inp_image" oninput="updatePreview()" placeholder="https://...">
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div>
+                    <label>Ping Mention</label>
+                    <select name="ping_type" id="inp_ping" onchange="updatePreview()">
+                        <option value="none">No Ping</option>
+                        <option value="everyone">@everyone</option>
+                        <option value="role">Specific Role</option>
+                    </select>
+                </div>
+                <div id="ping_role_div" style="display: none;">
+                    <label>Role ID</label>
+                    <input type="text" name="role_id" id="inp_role" oninput="updatePreview()" placeholder="123456789...">
+                </div>
+            </div>
+            
+            <button type="submit" id="post_btn" style="width: 100%; justify-content: center; margin-top: 1rem;">
+                <i class="fas fa-paper-plane"></i> Publish to #announcements
+            </button>
+        </form>
+    </div>
+    
+    <div class="card">
+        <h3><i class="fas fa-eye"></i> Live Preview</h3>
+        <div class="discord-preview">
+            <div class="discord-message">
+                <div class="discord-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="discord-content">
+                    <div class="discord-header">
+                        <span class="discord-username">S.E.R.A Bot</span>
+                        <span class="discord-bot-tag" style="background:#5865F2;color:white;font-size:0.65rem;padding:2px 4px;border-radius:3px;margin-left:4px;">APP</span>
+                        <span class="discord-timestamp">Today at 12:00 PM</span>
+                    </div>
+                    
+                    <div id="preview_ping_container" style="display: none; margin-bottom: 0.5rem; color: #dbdee1; font-size: 0.95rem;">
+                        <span id="preview_ping" class="discord-ping"></span>
+                    </div>
+                    
+                    <div class="discord-embed" id="preview_embed">
+                        <div class="discord-embed-title" id="preview_title">Embed Title</div>
+                        <div class="discord-embed-desc" id="preview_desc">Content will appear here...</div>
+                        <img id="preview_image" class="discord-embed-image" src="" alt="Embed Image">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+    // Setup basic marked options
+    marked.setOptions({
+        breaks: true,
+        gfm: true
+    });
+
+    function insertFormat(startTag, endTag) {
+        const textarea = document.getElementById('inp_content');
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        
+        textarea.value = text.substring(0, start) + startTag + text.substring(start, end) + endTag + text.substring(end);
+        textarea.focus();
+        textarea.selectionStart = start + startTag.length;
+        textarea.selectionEnd = end + startTag.length;
+        updatePreview();
+    }
+
+    function updatePreview() {
+        // Ping
+        const pingType = document.getElementById('inp_ping').value;
+        const pingRoleDiv = document.getElementById('ping_role_div');
+        const pingRole = document.getElementById('inp_role').value;
+        const previewPingContainer = document.getElementById('preview_ping_container');
+        const previewPing = document.getElementById('preview_ping');
+        
+        if (pingType === 'everyone') {
+            pingRoleDiv.style.display = 'none';
+            previewPingContainer.style.display = 'block';
+            previewPing.innerText = '@everyone';
+        } else if (pingType === 'role') {
+            pingRoleDiv.style.display = 'block';
+            previewPingContainer.style.display = 'block';
+            previewPing.innerText = `@Role (${pingRole || 'ID'})`;
+        } else {
+            pingRoleDiv.style.display = 'none';
+            previewPingContainer.style.display = 'none';
+        }
+        
+        // Embed Color
+        const color = document.getElementById('inp_color').value;
+        document.getElementById('preview_embed').style.borderLeftColor = color;
+        
+        // Embed Title
+        const title = document.getElementById('inp_title').value;
+        document.getElementById('preview_title').innerText = title || "Embed Title";
+        
+        // Content
+        const content = document.getElementById('inp_content').value;
+        // Basic Discord Markdown parser for preview using marked
+        const parsedContent = content ? marked.parse(content) : "Content will appear here...";
+        document.getElementById('preview_desc').innerHTML = parsedContent;
+        
+        // Image
+        const imgUrl = document.getElementById('inp_image').value;
+        const imgEl = document.getElementById('preview_image');
+        if (imgUrl) {
+            imgEl.src = imgUrl;
+            imgEl.style.display = 'block';
+        } else {
+            imgEl.style.display = 'none';
+        }
+    }
+
+    async function postAnnouncement(e) {
+        e.preventDefault();
+        const btn = document.getElementById('post_btn');
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        
+        await withLoading(btn, async () => {
+            try {
+                await API.post('/admin/api/post_announcement', data);
+                showToast('Announcement posted successfully!');
+                e.target.reset();
+                updatePreview();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    }
+
+    // Initialize preview
+    updatePreview();
+</script>
+{% endblock %}
