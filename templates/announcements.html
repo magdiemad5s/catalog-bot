@@ -27,32 +27,51 @@
     .discord-username { color: #f2f3f5; font-weight: 500; font-size: 1rem; }
     .discord-timestamp { color: #949ba4; font-size: 0.75rem; }
     
-    .discord-ping { color: #c9cdfb; background: rgba(88, 101, 242, 0.3); padding: 0 4px; border-radius: 3px; font-weight: 500; }
+    .discord-ping { color: #c9cdfb; background: rgba(88, 101, 242, 0.3); padding: 0 4px; border-radius: 3px; font-weight: 500; display: inline-block; }
+    
+    .discord-normal-text { color: #dbdee1; font-size: 0.95rem; line-height: 1.375; white-space: pre-wrap; word-wrap: break-word; margin-bottom: 0.5rem; }
+    .discord-normal-text img.emoji { width: 1.375rem; height: 1.375rem; vertical-align: bottom; }
     
     .discord-embed {
         background: #2b2d31;
         border-left: 4px solid var(--primary);
         border-radius: 4px;
         padding: 0.75rem 1rem;
-        margin-top: 0.5rem;
+        margin-top: 0.25rem;
         max-width: 520px;
     }
     .discord-embed-title { color: #f2f3f5; font-weight: 600; font-size: 1rem; margin-bottom: 0.5rem; }
     .discord-embed-desc { color: #dbdee1; font-size: 0.875rem; line-height: 1.375; white-space: pre-wrap; word-wrap: break-word;}
     .discord-embed-desc a { color: #00a8fc; text-decoration: none; }
     .discord-embed-desc a:hover { text-decoration: underline; }
+    .discord-embed-desc img.emoji { width: 1.375rem; height: 1.375rem; vertical-align: bottom; }
     
     .discord-embed-image { margin-top: 1rem; border-radius: 4px; max-width: 100%; max-height: 300px; object-fit: contain; display: none; }
+    
+    .discord-attachments { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+    .discord-attachment { max-width: 400px; max-height: 300px; border-radius: 8px; object-fit: contain; background: #232428; }
     
     .format-toolbar {
         display: flex; gap: 0.5rem; margin-bottom: 0.5rem;
         background: rgba(255,255,255,0.05); padding: 0.5rem; border-radius: 6px;
+        align-items: center; position: relative;
     }
     .format-btn {
         background: transparent; color: var(--text); border: 1px solid var(--surface-border);
         padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem;
     }
     .format-btn:hover { background: rgba(255,255,255,0.1); }
+    
+    .emoji-picker-btn { margin-left: auto; color: #facc15; border-color: #ca8a04; }
+    .emoji-picker-container {
+        position: absolute; right: 0; top: 40px; width: 280px; max-height: 200px;
+        background: var(--surface); border: 1px solid var(--surface-border);
+        border-radius: 8px; overflow-y: auto; display: none; padding: 0.5rem;
+        z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 0.25rem;
+    }
+    .emoji-item { width: 32px; height: 32px; cursor: pointer; border-radius: 4px; padding: 2px; }
+    .emoji-item:hover { background: rgba(255,255,255,0.1); }
 </style>
 {% endblock %}
 
@@ -60,34 +79,61 @@
 <div class="grid">
     <div class="card">
         <h3><i class="fas fa-edit"></i> Compose Announcement</h3>
-        <form id="announcement_form" onsubmit="postAnnouncement(event)">
-            <label>Embed Title</label>
-            <input type="text" name="title" id="inp_title" oninput="updatePreview()" placeholder="Server Update!" required>
+        <form id="announcement_form" onsubmit="postAnnouncement(event)" enctype="multipart/form-data">
             
-            <label>Announcement Content (Markdown Supported)</label>
-            <div class="format-toolbar">
-                <button type="button" class="format-btn" onclick="insertFormat('**', '**')" title="Bold"><i class="fas fa-bold"></i></button>
-                <button type="button" class="format-btn" onclick="insertFormat('*', '*')" title="Italic"><i class="fas fa-italic"></i></button>
-                <button type="button" class="format-btn" onclick="insertFormat('__', '__')" title="Underline"><i class="fas fa-underline"></i></button>
-                <button type="button" class="format-btn" onclick="insertFormat('~~', '~~')" title="Strikethrough"><i class="fas fa-strikethrough"></i></button>
-                <button type="button" class="format-btn" onclick="insertFormat('\n> ', '')" title="Quote"><i class="fas fa-quote-right"></i></button>
-                <button type="button" class="format-btn" onclick="insertFormat('```\n', '\n```')" title="Code Block"><i class="fas fa-code"></i></button>
-                <button type="button" class="format-btn" onclick="insertFormat('[Link Text](', ')')" title="Link"><i class="fas fa-link"></i></button>
-            </div>
-            <textarea name="content" id="inp_content" rows="8" oninput="updatePreview()" placeholder="Type your message here..." required></textarea>
+            <label>Message Mode</label>
+            <select name="mode" id="inp_mode" onchange="toggleMode()">
+                <option value="both">Both (Normal + Embed)</option>
+                <option value="embed">Embed Only</option>
+                <option value="text">Normal Text Only</option>
+            </select>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div>
-                    <label>Embed Color</label>
-                    <input type="color" name="color" id="inp_color" value="#6366f1" oninput="updatePreview()" style="height: 40px; padding: 0.2rem;">
+            <div id="section_normal" style="margin-top: 1rem;">
+                <label>Normal Message Content</label>
+                <div class="format-toolbar">
+                    <button type="button" class="format-btn emoji-picker-btn" onclick="toggleEmojiPicker('inp_normal_content')"><i class="fas fa-smile"></i></button>
+                    <div class="emoji-picker-container" id="emoji_picker_inp_normal_content"></div>
                 </div>
-                <div>
-                    <label>Image URL (Optional)</label>
-                    <input type="url" name="image_url" id="inp_image" oninput="updatePreview()" placeholder="https://...">
-                </div>
+                <textarea name="normal_content" id="inp_normal_content" rows="4" oninput="updatePreview()" placeholder="Type raw message here..."></textarea>
             </div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div id="section_embed" style="margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid var(--surface-border);">
+                <label>Embed Title</label>
+                <input type="text" name="title" id="inp_title" oninput="updatePreview()" placeholder="Server Update!">
+                
+                <label>Embed Description (Markdown Supported)</label>
+                <div class="format-toolbar">
+                    <button type="button" class="format-btn" onclick="insertFormat('inp_content', '**', '**')" title="Bold"><i class="fas fa-bold"></i></button>
+                    <button type="button" class="format-btn" onclick="insertFormat('inp_content', '*', '*')" title="Italic"><i class="fas fa-italic"></i></button>
+                    <button type="button" class="format-btn" onclick="insertFormat('inp_content', '__', '__')" title="Underline"><i class="fas fa-underline"></i></button>
+                    <button type="button" class="format-btn" onclick="insertFormat('inp_content', '~~', '~~')" title="Strikethrough"><i class="fas fa-strikethrough"></i></button>
+                    <button type="button" class="format-btn" onclick="insertFormat('inp_content', '\n> ', '')" title="Quote"><i class="fas fa-quote-right"></i></button>
+                    <button type="button" class="format-btn" onclick="insertFormat('inp_content', '```\n', '\n```')" title="Code Block"><i class="fas fa-code"></i></button>
+                    <button type="button" class="format-btn" onclick="insertFormat('inp_content', '[Link Text](', ')')" title="Link"><i class="fas fa-link"></i></button>
+                    
+                    <button type="button" class="format-btn emoji-picker-btn" onclick="toggleEmojiPicker('inp_content')"><i class="fas fa-smile"></i></button>
+                    <div class="emoji-picker-container" id="emoji_picker_inp_content"></div>
+                </div>
+                <textarea name="content" id="inp_content" rows="6" oninput="updatePreview()" placeholder="Type embed description here..."></textarea>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <label>Embed Color</label>
+                        <input type="color" name="color" id="inp_color" value="#6366f1" oninput="updatePreview()" style="height: 40px; padding: 0.2rem;">
+                    </div>
+                    <div>
+                        <label>Image URL (Optional)</label>
+                        <input type="url" name="image_url" id="inp_image" oninput="updatePreview()" placeholder="https://...">
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 1rem;">
+                <label>Attachments (Upload Images/Files)</label>
+                <input type="file" name="attachments" id="inp_files" multiple accept="image/*" onchange="updatePreview()">
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
                 <div>
                     <label>Ping Mention</label>
                     <select name="ping_type" id="inp_ping" onchange="updatePreview()">
@@ -122,15 +168,19 @@
                         <span class="discord-timestamp">Today at 12:00 PM</span>
                     </div>
                     
-                    <div id="preview_ping_container" style="display: none; margin-bottom: 0.5rem; color: #dbdee1; font-size: 0.95rem;">
+                    <div id="preview_ping_container" style="display: none; margin-bottom: 0.2rem;">
                         <span id="preview_ping" class="discord-ping"></span>
                     </div>
+                    
+                    <div id="preview_normal_text" class="discord-normal-text" style="display: none;"></div>
                     
                     <div class="discord-embed" id="preview_embed">
                         <div class="discord-embed-title" id="preview_title">Embed Title</div>
                         <div class="discord-embed-desc" id="preview_desc">Content will appear here...</div>
                         <img id="preview_image" class="discord-embed-image" src="" alt="Embed Image">
                     </div>
+                    
+                    <div class="discord-attachments" id="preview_attachments"></div>
                 </div>
             </div>
         </div>
@@ -141,14 +191,63 @@
 {% block extra_script %}
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
-    // Setup basic marked options
-    marked.setOptions({
-        breaks: true,
-        gfm: true
+    marked.setOptions({ breaks: true, gfm: true });
+
+    let emojisCache = [];
+
+    // Load Emojis
+    async function loadEmojis() {
+        try {
+            const res = await fetch('/admin/api/emojis');
+            emojisCache = await res.json();
+        } catch (err) {
+            console.error("Failed to load emojis", err);
+        }
+    }
+    
+    function renderEmojiPicker(targetInputId) {
+        const container = document.getElementById(`emoji_picker_${targetInputId}`);
+        container.innerHTML = '';
+        if (emojisCache.length === 0) {
+            container.innerHTML = '<span style="font-size: 0.8rem;">No custom emojis found</span>';
+            return;
+        }
+        
+        emojisCache.forEach(emoji => {
+            const img = document.createElement('img');
+            img.src = emoji.url;
+            img.className = 'emoji-item';
+            img.title = `:${emoji.name}:`;
+            img.onclick = () => {
+                const syntax = `<${emoji.animated ? 'a' : ''}:${emoji.name}:${emoji.id}>`;
+                insertFormat(targetInputId, syntax, '');
+                container.style.display = 'none';
+            };
+            container.appendChild(img);
+        });
+    }
+
+    function toggleEmojiPicker(targetInputId) {
+        const container = document.getElementById(`emoji_picker_${targetInputId}`);
+        if (container.style.display === 'grid') {
+            container.style.display = 'none';
+        } else {
+            // hide all other pickers
+            document.querySelectorAll('.emoji-picker-container').forEach(el => el.style.display = 'none');
+            if (container.innerHTML === '') renderEmojiPicker(targetInputId);
+            container.style.display = 'grid';
+        }
+    }
+
+    // Hide pickers on outside click
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.format-toolbar')) {
+            document.querySelectorAll('.emoji-picker-container').forEach(el => el.style.display = 'none');
+        }
     });
 
-    function insertFormat(startTag, endTag) {
-        const textarea = document.getElementById('inp_content');
+    function insertFormat(targetId, startTag, endTag) {
+        const textarea = document.getElementById(targetId);
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
         const text = textarea.value;
@@ -159,8 +258,32 @@
         textarea.selectionEnd = end + startTag.length;
         updatePreview();
     }
+    
+    function parseCustomEmojis(text) {
+        // Parse <a:name:id> or <:name:id>
+        return text.replace(/<a?:(\w+):(\d+)>/g, (match, name, id) => {
+            const isAnimated = match.startsWith('<a:');
+            const ext = isAnimated ? 'gif' : 'png';
+            return `<img class="emoji" src="https://cdn.discordapp.com/emojis/${id}.${ext}" alt=":${name}:" title=":${name}:">`;
+        });
+    }
+
+    function toggleMode() {
+        const mode = document.getElementById('inp_mode').value;
+        document.getElementById('section_normal').style.display = (mode === 'text' || mode === 'both') ? 'block' : 'none';
+        document.getElementById('section_embed').style.display = (mode === 'embed' || mode === 'both') ? 'block' : 'none';
+        
+        // toggle required
+        document.getElementById('inp_normal_content').required = (mode === 'text');
+        document.getElementById('inp_title').required = (mode === 'embed');
+        document.getElementById('inp_content').required = (mode === 'embed');
+        
+        updatePreview();
+    }
 
     function updatePreview() {
+        const mode = document.getElementById('inp_mode').value;
+        
         // Ping
         const pingType = document.getElementById('inp_ping').value;
         const pingRoleDiv = document.getElementById('ping_role_div');
@@ -181,50 +304,93 @@
             previewPingContainer.style.display = 'none';
         }
         
-        // Embed Color
-        const color = document.getElementById('inp_color').value;
-        document.getElementById('preview_embed').style.borderLeftColor = color;
-        
-        // Embed Title
-        const title = document.getElementById('inp_title').value;
-        document.getElementById('preview_title').innerText = title || "Embed Title";
-        
-        // Content
-        const content = document.getElementById('inp_content').value;
-        // Basic Discord Markdown parser for preview using marked
-        const parsedContent = content ? marked.parse(content) : "Content will appear here...";
-        document.getElementById('preview_desc').innerHTML = parsedContent;
-        
-        // Image
-        const imgUrl = document.getElementById('inp_image').value;
-        const imgEl = document.getElementById('preview_image');
-        if (imgUrl) {
-            imgEl.src = imgUrl;
-            imgEl.style.display = 'block';
+        // Normal Text
+        const normalTextEl = document.getElementById('preview_normal_text');
+        if (mode === 'text' || mode === 'both') {
+            const rawText = document.getElementById('inp_normal_content').value;
+            normalTextEl.innerHTML = parseCustomEmojis(rawText.replace(/\n/g, '<br>')) || "Normal text content...";
+            normalTextEl.style.display = 'block';
         } else {
-            imgEl.style.display = 'none';
+            normalTextEl.style.display = 'none';
+        }
+        
+        // Embed
+        const embedEl = document.getElementById('preview_embed');
+        if (mode === 'embed' || mode === 'both') {
+            embedEl.style.display = 'block';
+            const color = document.getElementById('inp_color').value;
+            embedEl.style.borderLeftColor = color;
+            
+            const title = document.getElementById('inp_title').value;
+            document.getElementById('preview_title').innerText = title || "Embed Title";
+            
+            const content = document.getElementById('inp_content').value;
+            const textWithEmojis = parseCustomEmojis(content);
+            const parsedContent = content ? marked.parse(textWithEmojis) : "Content will appear here...";
+            document.getElementById('preview_desc').innerHTML = parsedContent;
+            
+            const imgUrl = document.getElementById('inp_image').value;
+            const imgEl = document.getElementById('preview_image');
+            if (imgUrl) {
+                imgEl.src = imgUrl;
+                imgEl.style.display = 'block';
+            } else {
+                imgEl.style.display = 'none';
+            }
+        } else {
+            embedEl.style.display = 'none';
+        }
+        
+        // Attachments preview
+        const fileInput = document.getElementById('inp_files');
+        const previewAttachments = document.getElementById('preview_attachments');
+        previewAttachments.innerHTML = '';
+        
+        if (fileInput.files && fileInput.files.length > 0) {
+            Array.from(fileInput.files).forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    const img = document.createElement('img');
+                    img.className = 'discord-attachment';
+                    img.src = URL.createObjectURL(file);
+                    previewAttachments.appendChild(img);
+                }
+            });
         }
     }
 
     async function postAnnouncement(e) {
         e.preventDefault();
         const btn = document.getElementById('post_btn');
-        const formData = new FormData(e.target);
-        const data = Object.fromEntries(formData.entries());
+        const form = e.target;
+        
+        // Using FormData to send multipart/form-data
+        const formData = new FormData(form);
         
         await withLoading(btn, async () => {
             try {
-                await API.post('/admin/api/post_announcement', data);
-                showToast('Announcement posted successfully!');
-                e.target.reset();
-                updatePreview();
+                // Notice we don't use API.post which sends JSON
+                // We use standard fetch with body: formData
+                const response = await fetch('/admin/api/post_announcement', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    showToast('Announcement posted successfully!');
+                    form.reset();
+                    toggleMode();
+                } else {
+                    throw new Error(result.error || 'Failed to post announcement');
+                }
             } catch (err) {
                 showToast(err.message, 'error');
             }
         });
     }
 
-    // Initialize preview
-    updatePreview();
+    // Initialize
+    loadEmojis();
+    toggleMode();
 </script>
 {% endblock %}

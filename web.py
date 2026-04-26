@@ -261,13 +261,23 @@ async def announce_live_api(request):
     
     return web.json_response({"error": "Channel not found"}, status=500)
 
+@admin_routes.get("/admin/api/emojis")
+async def get_emojis_api(request):
+    bot = request.app['bot']
+    emojis = [{"name": e.name, "id": str(e.id), "url": e.url, "animated": e.animated} for e in bot.emojis]
+    return web.json_response(emojis)
+
 @admin_routes.post("/admin/api/post_announcement")
 async def post_announcement_api(request):
-    data = await request.json()
+    # Support multipart/form-data for file uploads
+    data = await request.post()
     bot = request.app['bot']
     
-    title = data.get("title", "")
-    content = data.get("content", "")
+    mode = data.get("mode", "embed")
+    normal_content = data.get("normal_content", "")
+    embed_title = data.get("title", "")
+    embed_content = data.get("content", "")
+    
     ping_type = data.get("ping_type", "none")
     role_id = data.get("role_id", "").strip()
     color_hex = data.get("color", "#6366f1")
@@ -277,17 +287,34 @@ async def post_announcement_api(request):
     channel = bot.get_channel(target_channel_id)
     
     if channel:
+        import io
+        
         ping_text = ""
         if ping_type == "everyone":
             ping_text = "@everyone\n"
         elif ping_type == "role" and role_id.isdigit():
             ping_text = f"<@&{role_id}>\n"
             
-        embed = discord.Embed(title=title, description=content, color=int(color_hex.replace("#", ""), 16))
-        if image_url:
-            embed.set_image(url=image_url)
+        files = []
+        attachments = data.getall("attachments", [])
+        for attachment in attachments:
+            if hasattr(attachment, 'filename') and attachment.filename:
+                file_content = attachment.file.read()
+                files.append(discord.File(fp=io.BytesIO(file_content), filename=attachment.filename))
+                
+        embed = None
+        message_content = ping_text
         
-        bot.loop.create_task(channel.send(content=ping_text.strip(), embed=embed))
+        if mode in ["embed", "both"]:
+            embed = discord.Embed(title=embed_title, description=embed_content, color=int(color_hex.replace("#", ""), 16))
+            if image_url:
+                embed.set_image(url=image_url)
+                
+        if mode in ["text", "both"]:
+            if normal_content:
+                message_content += f"\n{normal_content}"
+                
+        bot.loop.create_task(channel.send(content=message_content.strip(), embed=embed, files=files))
         return web.json_response({"success": True})
     
     return web.json_response({"error": "Channel not found. Ensure bot has access."}, status=500)
