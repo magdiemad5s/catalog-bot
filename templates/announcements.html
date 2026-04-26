@@ -101,7 +101,10 @@
                 <label>Embed Title</label>
                 <input type="text" name="title" id="inp_title" oninput="updatePreview()" placeholder="Server Update!">
                 
-                <label>Embed Description (Markdown Supported)</label>
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>Embed Description (Markdown Supported)</span>
+                    <button type="button" onclick="clearEmbedFields()" style="background:none; border:none; color:var(--danger); padding:0; cursor:pointer; font-size:0.8rem; font-weight:bold;">[Clear Embed Data]</button>
+                </label>
                 <div class="format-toolbar">
                     <button type="button" class="format-btn" onclick="insertFormat('inp_content', '**', '**')" title="Bold"><i class="fas fa-bold"></i></button>
                     <button type="button" class="format-btn" onclick="insertFormat('inp_content', '*', '*')" title="Italic"><i class="fas fa-italic"></i></button>
@@ -148,9 +151,14 @@
                 </div>
             </div>
             
-            <button type="submit" id="post_btn" style="width: 100%; justify-content: center; margin-top: 1rem;">
-                <i class="fas fa-paper-plane"></i> Publish to #announcements
-            </button>
+            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                <button type="button" class="secondary" style="flex: 1; justify-content: center;" onclick="resetForm()">
+                    <i class="fas fa-trash"></i> Reset Form
+                </button>
+                <button type="submit" id="post_btn" style="flex: 2; justify-content: center;">
+                    <i class="fas fa-paper-plane"></i> Publish to #announcements
+                </button>
+            </div>
         </form>
     </div>
     
@@ -347,14 +355,71 @@
         previewAttachments.innerHTML = '';
         
         if (fileInput.files && fileInput.files.length > 0) {
-            Array.from(fileInput.files).forEach(file => {
+            Array.from(fileInput.files).forEach((file, index) => {
                 if (file.type.startsWith('image/')) {
+                    const wrapper = document.createElement('div');
+                    wrapper.style.position = 'relative';
+                    wrapper.style.display = 'inline-block';
+                    
                     const img = document.createElement('img');
                     img.className = 'discord-attachment';
                     img.src = URL.createObjectURL(file);
-                    previewAttachments.appendChild(img);
+                    
+                    const removeBtn = document.createElement('button');
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.className = 'danger';
+                    removeBtn.style.position = 'absolute';
+                    removeBtn.style.top = '0px';
+                    removeBtn.style.right = '0px';
+                    removeBtn.style.borderRadius = '50%';
+                    removeBtn.style.width = '24px';
+                    removeBtn.style.height = '24px';
+                    removeBtn.style.padding = '0';
+                    removeBtn.style.display = 'flex';
+                    removeBtn.style.alignItems = 'center';
+                    removeBtn.style.justifyContent = 'center';
+                    removeBtn.style.cursor = 'pointer';
+                    removeBtn.title = "Cancel Upload";
+                    removeBtn.onclick = (e) => {
+                        e.preventDefault();
+                        removeFile(index);
+                    };
+                    
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(removeBtn);
+                    previewAttachments.appendChild(wrapper);
                 }
             });
+        }
+    }
+
+    function removeFile(index) {
+        const fileInput = document.getElementById('inp_files');
+        const dt = new DataTransfer();
+        const files = fileInput.files;
+        
+        for (let i = 0; i < files.length; i++) {
+            if (i !== index) {
+                dt.items.add(files[i]);
+            }
+        }
+        
+        fileInput.files = dt.files;
+        updatePreview();
+    }
+    
+    function clearEmbedFields() {
+        document.getElementById('inp_title').value = '';
+        document.getElementById('inp_content').value = '';
+        document.getElementById('inp_color').value = '#6366f1';
+        document.getElementById('inp_image').value = '';
+        updatePreview();
+    }
+    
+    function resetForm() {
+        if(confirm("Are you sure you want to clear the entire form?")) {
+            document.getElementById('announcement_form').reset();
+            updatePreview();
         }
     }
 
