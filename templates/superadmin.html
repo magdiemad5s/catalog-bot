@@ -50,6 +50,16 @@
     </div>
 </div>
 
+</div>
+    
+<h3><i class="fas fa-server"></i> System Actions</h3>
+<div class="card" style="margin-bottom: 2rem;">
+    <p class="text-muted">Pull the latest source code from Git and restart the server.</p>
+    <button onclick="updateBot(this)" class="primary">
+        <i class="fas fa-download"></i> Update & Restart Bot
+    </button>
+</div>
+
 <h3><i class="fas fa-server"></i> Connected Servers</h3>
 
 <div class="grid">
@@ -87,9 +97,14 @@
                         </div>
                     </div>
                     
-                    <button class="secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;" onclick="resetAccount('{{ admin.username }}')">
-                        <i class="fas fa-undo"></i> Force Reset
-                    </button>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;" onclick="resetAccount('{{ admin.username }}')">
+                            <i class="fas fa-undo"></i> Force Reset
+                        </button>
+                        <button class="danger" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;" onclick="deleteAccount('{{ admin.username }}')">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
                 </div>
                 {% endfor %}
             {% else %}
@@ -130,6 +145,42 @@
             setTimeout(() => location.reload(), 1000);
         } catch (err) {
             showToast(err.message, 'error');
+        }
+    }
+    
+    async function deleteAccount(username) {
+        if (!confirm(`CRITICAL WARNING: Are you sure you want to completely DELETE the admin account '${username}'? This cannot be undone.`)) {
+            return;
+        }
+        
+        try {
+            await API.post('/superadmin/api/delete_account', {
+                username: username
+            });
+            showToast(`Account '${username}' deleted.`);
+            setTimeout(() => location.reload(), 1000);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+    
+    async function updateBot(btn) {
+        if (!confirm('Are you sure you want to pull the latest code? The bot will update and may reboot.')) return;
+        
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+        btn.disabled = true;
+        
+        try {
+            const res = await API.post('/superadmin/api/update', {});
+            alert("Update Output:\n" + res.output);
+            showToast('Update command issued successfully!');
+        } catch (err) {
+            alert("Update Failed:\n" + err.message);
+            showToast(err.message, 'error');
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
         }
     }
 </script>

@@ -24,30 +24,28 @@ class Rules(commands.Cog, name="Rules"):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        settings = load_settings()
-        self._rules_text = settings.get("rules_text", "")
-
-    def get_rules_text(self) -> str:
+    def get_rules_text(self, guild_id: int) -> str:
         """Return the current rules text (called by web.py dashboard)."""
-        return self._rules_text
+        settings = load_settings(guild_id)
+        return settings.get("rules_text", "")
 
-    async def update_rules_text(self, new_text: str):
+    async def update_rules_text(self, guild_id: int, new_text: str):
         """Update rules in memory + settings file, then post to the rules channel."""
         if not new_text or not new_text.strip():
             log.warning("update_rules_text called with empty text. Skipping post.")
             return
 
-        self._rules_text = new_text
-        log.info(f"update_rules_text called with {len(new_text)} chars.")
+        log.info(f"update_rules_text called with {len(new_text)} chars for guild {guild_id}.")
 
-        # Persist to settings.json
-        settings = load_settings()
+        # Persist to settings_{guild_id}.json
+        settings = load_settings(guild_id)
         settings["rules_text"] = new_text
-        save_settings(settings)
-        log.info("Rules text saved to settings.json.")
+        save_settings(settings, guild_id)
+        log.info(f"Rules text saved to settings_{guild_id}.json.")
 
-        # Post to every guild's rules channel
-        for guild in self.bot.guilds:
+        # Post to the specific guild's rules channel
+        guild = self.bot.get_guild(guild_id)
+        if guild:
             channel = None
             try:
                 from db.client import get_db
@@ -62,7 +60,7 @@ class Rules(commands.Cog, name="Rules"):
                 channel = discord.utils.get(guild.text_channels, name="rules")
             if not channel:
                 log.warning(f"No rules channel found in {guild.name}.")
-                continue
+                return
 
             log.info(f"Found rules channel: #{channel.name} ({channel.id}) in {guild.name}")
 

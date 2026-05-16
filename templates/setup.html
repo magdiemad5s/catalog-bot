@@ -35,8 +35,8 @@
                 
                 <div class="mb-3">
                     <label class="form-label">Announcement Channel</label>
-                    <select class="form-select" id="announcement_channel_id" required>
-                        <option value="">Select a channel...</option>
+                    <select class="form-select" id="announcement_channel_id">
+                        <option value="">Skip / Setup later...</option>
                         {% for c in channels %}
                         <option value="{{ c.id }}">#{{ c.name }}</option>
                         {% endfor %}
@@ -45,8 +45,8 @@
 
                 <div class="mb-3">
                     <label class="form-label">Rules Channel</label>
-                    <select class="form-select" id="rules_channel_id" required>
-                        <option value="">Select a channel...</option>
+                    <select class="form-select" id="rules_channel_id">
+                        <option value="">Skip / Setup later...</option>
                         {% for c in channels %}
                         <option value="{{ c.id }}">#{{ c.name }}</option>
                         {% endfor %}
@@ -55,8 +55,8 @@
 
                 <div class="mb-3">
                     <label class="form-label">Moderator/Logs Channel</label>
-                    <select class="form-select" id="mod_channel_id" required>
-                        <option value="">Select a channel...</option>
+                    <select class="form-select" id="mod_channel_id">
+                        <option value="">Skip / Setup later...</option>
                         {% for c in channels %}
                         <option value="{{ c.id }}">#{{ c.name }}</option>
                         {% endfor %}
@@ -65,8 +65,8 @@
 
                 <div class="mb-3">
                     <label class="form-label">Library Cards Channel</label>
-                    <select class="form-select" id="card_channel_id" required>
-                        <option value="">Select a channel...</option>
+                    <select class="form-select" id="card_channel_id">
+                        <option value="">Skip / Setup later...</option>
                         {% for c in channels %}
                         <option value="{{ c.id }}">#{{ c.name }}</option>
                         {% endfor %}
@@ -75,8 +75,8 @@
 
                 <div class="mb-3">
                     <label class="form-label">Giveaway Channel</label>
-                    <select class="form-select" id="giveaway_channel_id" required>
-                        <option value="">Select a channel...</option>
+                    <select class="form-select" id="giveaway_channel_id">
+                        <option value="">Skip / Setup later...</option>
                         {% for c in channels %}
                         <option value="{{ c.id }}">#{{ c.name }}</option>
                         {% endfor %}

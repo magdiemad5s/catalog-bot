@@ -11,45 +11,55 @@ def _init_data_dir():
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
 
-def load_settings() -> dict:
+def load_settings(guild_id: int = None) -> dict:
     _init_data_dir()
-    if not os.path.exists(SETTINGS_PATH):
+    path = os.path.join(os.path.dirname(SETTINGS_PATH), f"settings_{guild_id}.json") if guild_id else SETTINGS_PATH
+    if not os.path.exists(path):
         return {}
     try:
-        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        log.error(f"Failed to load settings.json: {e}")
+        log.error(f"Failed to load settings for {guild_id or 'global'}: {e}")
         return {}
 
-def save_settings(data: dict):
+def save_settings(data: dict, guild_id: int = None):
     _init_data_dir()
+    path = os.path.join(os.path.dirname(SETTINGS_PATH), f"settings_{guild_id}.json") if guild_id else SETTINGS_PATH
     try:
-        with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
     except Exception as e:
-        log.error(f"Failed to save settings.json: {e}")
+        log.error(f"Failed to save settings for {guild_id or 'global'}: {e}")
 
-def get_presets() -> dict:
-    settings = load_settings()
-    return settings.get("presets", {})
+def get_presets(guild_id: int) -> dict:
+    path = os.path.join(os.path.dirname(SETTINGS_PATH), f"presets_{guild_id}.json")
+    if not os.path.exists(path): return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except: return {}
 
-def save_preset(name: str, prompt: str):
-    settings = load_settings()
-    if "presets" not in settings:
-        settings["presets"] = {}
-    settings["presets"][name] = prompt
-    save_settings(settings)
+def save_preset(guild_id: int, name: str, prompt: str):
+    presets = get_presets(guild_id)
+    presets[name] = prompt
+    path = os.path.join(os.path.dirname(SETTINGS_PATH), f"presets_{guild_id}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(presets, f, indent=4)
 
-def delete_preset(name: str):
-    settings = load_settings()
-    if "presets" in settings and name in settings["presets"]:
-        del settings["presets"][name]
-        save_settings(settings)
+def delete_preset(guild_id: int, name: str):
+    presets = get_presets(guild_id)
+    if name in presets:
+        del presets[name]
+        path = os.path.join(os.path.dirname(SETTINGS_PATH), f"presets_{guild_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(presets, f, indent=4)
 
-def rename_preset(old_name: str, new_name: str):
-    settings = load_settings()
-    if "presets" in settings and old_name in settings["presets"]:
-        prompt = settings["presets"].pop(old_name)
-        settings["presets"][new_name] = prompt
-        save_settings(settings)
+def rename_preset(guild_id: int, old_name: str, new_name: str):
+    presets = get_presets(guild_id)
+    if old_name in presets:
+        prompt = presets.pop(old_name)
+        presets[new_name] = prompt
+        path = os.path.join(os.path.dirname(SETTINGS_PATH), f"presets_{guild_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(presets, f, indent=4)

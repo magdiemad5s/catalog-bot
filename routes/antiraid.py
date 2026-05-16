@@ -31,7 +31,8 @@ async def antiraid_page(request):
         "active_page": "antiraid",
         "config": config,
         "channels": [{"id": c.id, "name": c.name} for g in bot.guilds if g.id == guild_id for c in g.text_channels],
-        "roles": [{"id": r.id, "name": r.name} for g in bot.guilds if g.id == guild_id for r in g.roles if not r.is_default()]
+        "roles": [{"id": r.id, "name": r.name} for g in bot.guilds if g.id == guild_id for r in g.roles if not r.is_default()],
+        "role": session.get("role", "GUILD_ADMIN")
     }
 
 @antiraid_routes.post("/admin/api/antiraid")

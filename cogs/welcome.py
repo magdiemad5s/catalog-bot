@@ -26,9 +26,7 @@ class Welcome(commands.Cog, name="Welcome"):
         self.join_queue = asyncio.Queue()
         self.active_onboarding = {} # user_id -> list of types.Content (conversation history)
         
-        # Controlled by Web Panel
-        settings = load_settings()
-        self.welcoming_enabled = settings.get("welcome_enabled", True)
+        # Controlled by Web Panel (Fetched per guild dynamically)
         
         # Start the queue worker when the cog is fully loaded
         self.worker_task = None
@@ -44,7 +42,8 @@ class Welcome(commands.Cog, name="Welcome"):
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         """Listener: immediately queue newly joined members."""
-        if not self.welcoming_enabled:
+        settings = load_settings(member.guild.id)
+        if not settings.get("welcome_enabled", True):
             return
             
         if member.bot:

@@ -183,6 +183,7 @@ create table if not exists filter_log (
 -- ── Minigames ────────────────────────────────────────────────────────────────
 create table if not exists minesweeper_sessions (
     session_id   uuid        primary key default gen_random_uuid(),
+    guild_id     bigint      not null default 0,
     user_id      bigint      not null,
     difficulty   text        not null,
     score        int         not null default 0,
@@ -193,6 +194,7 @@ create table if not exists minesweeper_sessions (
 
 create table if not exists roulette_sessions (
     session_id      uuid        primary key default gen_random_uuid(),
+    guild_id        bigint      not null default 0,
     host_user_id    bigint      not null,
     players         jsonb       not null default '[]',
     xp_pool         int         not null default 0,

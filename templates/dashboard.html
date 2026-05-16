@@ -134,6 +134,62 @@
 </form>
 
 <div class="card">
+    <h3><i class="fas fa-hashtag"></i> Server Channels Configuration</h3>
+    <form id="channels_form" onsubmit="saveChannels(event)">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>Announcement Channel</label>
+                <select name="announcement_channel_id">
+                    <option value="">None / Disabled</option>
+                    {% for c in channels %}
+                    <option value="{{ c.id }}" {% if guild_config.announcement_channel_id == c.id %}selected{% endif %}>#{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>Rules Channel</label>
+                <select name="rules_channel_id">
+                    <option value="">None / Disabled</option>
+                    {% for c in channels %}
+                    <option value="{{ c.id }}" {% if guild_config.rules_channel_id == c.id %}selected{% endif %}>#{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>Moderator/Logs Channel</label>
+                <select name="mod_channel_id">
+                    <option value="">None / Disabled</option>
+                    {% for c in channels %}
+                    <option value="{{ c.id }}" {% if guild_config.mod_channel_id == c.id %}selected{% endif %}>#{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>Library Cards Channel</label>
+                <select name="card_channel_id">
+                    <option value="">None / Disabled</option>
+                    {% for c in channels %}
+                    <option value="{{ c.id }}" {% if guild_config.card_channel_id == c.id %}selected{% endif %}>#{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>Giveaway Channel</label>
+                <select name="giveaway_channel_id">
+                    <option value="">None / Disabled</option>
+                    {% for c in channels %}
+                    <option value="{{ c.id }}" {% if guild_config.giveaway_channel_id == c.id %}selected{% endif %}>#{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="secondary" style="width: 100%; justify-content: center;">
+            <i class="fas fa-save"></i> Save Channel Configuration
+        </button>
+    </form>
+</div>
+
+<div class="card">
     <h3><i class="fas fa-scroll"></i> Server Rules Governance</h3>
     <form id="rules_form" onsubmit="saveRules(event)">
         <label>Rules Document (Live on Discord)</label>
@@ -252,6 +308,22 @@
             try {
                 await API.post('/admin/api/rules', { rules_text: formData.get('rules_text') });
                 showToast('Rules published to Discord!');
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    }
+
+    async function saveChannels(e) {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        
+        await withLoading(btn, async () => {
+            try {
+                await API.post('/admin/api/channels', data);
+                showToast('Channel configuration saved!');
             } catch (err) {
                 showToast(err.message, 'error');
             }

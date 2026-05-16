@@ -139,7 +139,13 @@ async def dashboard(request):
     ai_cog = bot.get_cog("AI")
     rules_cog = bot.get_cog("Rules")
     
-    settings = load_settings()
+    db = get_db()
+    res_config = db.table("guild_configs").select("*").eq("guild_id", guild_id).execute()
+    guild_config = res_config.data[0] if res_config.data else {}
+    
+    channels = [{"id": c.id, "name": c.name} for c in guild.text_channels] if guild else []
+    
+    settings = load_settings(guild_id)
     stats = ai_cog.get_stats() if ai_cog else {
         'total_requests': 0, 'total_rate_limits': 0, 'active_throttled': 0
     }
@@ -158,10 +164,12 @@ async def dashboard(request):
         "active_page": "dashboard",
         "stats": telemetry,
         "settings": settings,
-        "presets": get_presets(),
+        "presets": get_presets(guild_id),
         "rules_text": rules_text,
         "guild_name": guild.name if guild else "Unknown Server",
-        "role": session.get("role", "GUILD_ADMIN")
+        "role": session.get("role", "GUILD_ADMIN"),
+        "channels": channels,
+        "guild_config": guild_config
     }
 
 @admin_routes.get("/admin/announcements")
@@ -321,14 +329,83 @@ async def reset_account_api(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+@admin_routes.post("/superadmin/api/delete_account")
+async def delete_account_api(request):
+    session = await get_session(request)
+    if session.get("role") != "SUPER_ADMIN":
+        return web.json_response({"error": "Unauthorized"}, status=403)
+        
+    data = await request.json()
+    username = data.get("username")
+    
+    if not username:
+        return web.json_response({"error": "Missing username"}, status=400)
+        
+    db = get_db()
+    try:
+        db.table("admin_users").delete().eq("username", username).execute()
+        return web.json_response({"success": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+@admin_routes.post("/superadmin/api/update")
+async def update_bot_api(request):
+    session = await get_session(request)
+    if session.get("role") != "SUPER_ADMIN":
+        return web.json_response({"error": "Unauthorized"}, status=403)
+        
+    import subprocess
+    try:
+        result = subprocess.run(["git", "pull"], capture_output=True, text=True, check=True)
+        out = result.stdout.strip()
+        
+        # If there's an update, the PM2/systemd or nodemon would ideally restart it.
+        # But we'll just return the output for now.
+        return web.json_response({"success": True, "output": out})
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.strip() or e.stdout.strip()
+        return web.json_response({"error": f"Git pull failed: {err}"}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+@admin_routes.post("/admin/api/channels")
+async def update_channels_api(request):
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    if not guild_id:
+        return web.json_response({"error": "No guild context"}, status=400)
+        
+    data = await request.json()
+    db = get_db()
+    
+    payload = {
+        "guild_id": guild_id,
+        "announcement_channel_id": int(data.get("announcement_channel_id")) if data.get("announcement_channel_id") else None,
+        "rules_channel_id": int(data.get("rules_channel_id")) if data.get("rules_channel_id") else None,
+        "mod_channel_id": int(data.get("mod_channel_id")) if data.get("mod_channel_id") else None,
+        "card_channel_id": int(data.get("card_channel_id")) if data.get("card_channel_id") else None,
+        "giveaway_channel_id": int(data.get("giveaway_channel_id")) if data.get("giveaway_channel_id") else None
+    }
+    
+    try:
+        db.table("guild_configs").upsert(payload).execute()
+        return web.json_response({"success": True})
+    except Exception as e:
+        log.error(f"Failed to save channel config: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
 @admin_routes.post("/admin/api/settings")
 async def update_settings_api(request):
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    if not guild_id: return web.json_response({"error": "Unauthorized"}, status=401)
+    
     data = await request.json()
     bot = request.app['bot']
     
-    settings = load_settings()
+    settings = load_settings(guild_id)
     settings.update(data)
-    save_settings(settings)
+    save_settings(settings, guild_id)
     
     # Live update cogs
     ai_cog = bot.get_cog("AI")
@@ -351,26 +428,32 @@ async def update_settings_api(request):
 
 @admin_routes.post("/admin/api/rules")
 async def update_rules_api(request):
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    if not guild_id: return web.json_response({"error": "Unauthorized"}, status=401)
+    
     data = await request.json()
     bot = request.app['bot']
     rules_cog = bot.get_cog("Rules")
     
     if rules_cog:
         rules_text = data.get("rules_text", "")
-        bot.loop.create_task(rules_cog.update_rules_text(rules_text))
+        bot.loop.create_task(rules_cog.update_rules_text(guild_id, rules_text))
         return web.json_response({"success": True})
     
     return web.json_response({"error": "Rules cog not found"}, status=500)
 
 @admin_routes.post("/admin/api/presets")
 async def save_preset_api(request):
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
     data = await request.json()
     name = data.get("name")
     prompt = data.get("prompt")
-    if name and prompt:
-        save_preset(name, prompt)
+    if name and prompt and guild_id:
+        save_preset(guild_id, name, prompt)
         return web.json_response({"success": True})
-    return web.json_response({"error": "Missing name or prompt"}, status=400)
+    return web.json_response({"error": "Missing name, prompt, or guild context"}, status=400)
 
 @admin_routes.post("/admin/api/announce_live")
 async def announce_live_api(request):

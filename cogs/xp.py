@@ -132,7 +132,7 @@ class XP(commands.Cog, name="XP"):
         
         # Determine role boosts
         try:
-            res_boosts = db.table("xp_role_boosts").select("*").eq("enabled", True).execute()
+            res_boosts = db.table("xp_role_boosts").select("*").eq("guild_id", guild_id).eq("enabled", True).execute()
             if res_boosts.data:
                 for boost in res_boosts.data:
                     # Check if user has the role
@@ -393,7 +393,7 @@ class XP(commands.Cog, name="XP"):
             return
 
         db = get_db()
-        res = db.table("xp_role_boosts").select("*").eq("enabled", True).execute()
+        res = db.table("xp_role_boosts").select("*").eq("guild_id", interaction.guild_id).eq("enabled", True).execute()
         boosts = res.data if res.data else []
 
         active_boosts = []

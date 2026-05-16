@@ -51,20 +51,14 @@ class AI(commands.Cog, name="AI"):
         key3 = getattr(self.bot.config, "gemini_api_key_3", None)
         
         try:
+            self.primary_clients = []
+            self.fallback_client = None
             if key1: self.primary_clients.append(genai.Client(api_key=key1))
             if key2: self.primary_clients.append(genai.Client(api_key=key2))
             if key3: self.fallback_client = genai.Client(api_key=key3)
             
-            # Load persistent settings
-            settings = load_settings()
-            
-            self.system_instruction = settings.get('system_prompt', "You are Catalog, a funny, slightly unhinged Discord librarian who occasionally ragebaits and stirs the pot, but ultimately remains a helpful assistant. Keep your responses concise for Discord chat. Add humor and light sarcasm.")
-            self.ai_enabled = settings.get('ai_enabled', True)
-            self.rate_limit_count = settings.get('rate_limit_count', 5)
-            self.rate_limit_window = settings.get('rate_limit_window', 60)
-            self.reaction_chance = settings.get('reaction_chance', 100)
-            self.interception_chance = settings.get('interception_chance', 5)
-            self.interception_keywords = settings.get('interception_keywords', 'anime:5, library:10')
+            # Global fallbacks just in case
+            self.ai_enabled = True
             
             if self.primary_clients or self.fallback_client:
                 log.info(f"Gemini AI clients initialized. Primary pool: {len(self.primary_clients)}, Emergency fallback: {1 if self.fallback_client else 0}")
@@ -101,23 +95,18 @@ class AI(commands.Cog, name="AI"):
         }
         
     def update_settings(self, count, window, prompt, ai_enabled, reaction_chance, interception_chance, interception_keywords):
-        self.rate_limit_count = count
-        self.rate_limit_window = window
-        self.system_instruction = prompt
-        self.ai_enabled = ai_enabled
-        self.reaction_chance = reaction_chance
-        self.interception_chance = interception_chance
-        self.interception_keywords = interception_keywords
+        # Deprecated: Settings are loaded dynamically per-guild now
+        pass
 
-    def _is_rate_limited(self, user_id: int) -> bool:
+    def _is_rate_limited(self, user_id: int, count: int, window: int) -> bool:
         now = time.time()
         
         if user_id in self.user_usage:
-            self.user_usage[user_id] = [t for t in self.user_usage[user_id] if now - t <= self.rate_limit_window]
+            self.user_usage[user_id] = [t for t in self.user_usage[user_id] if now - t <= window]
         else:
             self.user_usage[user_id] = []
             
-        if len(self.user_usage[user_id]) >= self.rate_limit_count:
+        if len(self.user_usage[user_id]) >= count:
             self.stats_rate_limits += 1
             return True
             
@@ -383,7 +372,10 @@ class AI(commands.Cog, name="AI"):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """Unified entry point for AI chat processing."""
-        if message.author.bot or not self.ai_enabled:
+        guild_id = message.guild.id if message.guild else None
+        settings = load_settings(guild_id)
+        
+        if message.author.bot or not settings.get("ai_enabled", True):
             return
         if not self.primary_clients and not self.fallback_client:
             return
@@ -396,6 +388,16 @@ class AI(commands.Cog, name="AI"):
         # Context-based trigger requirements
         if message.guild and not self.bot.user.mentioned_in(message):
             return
+
+        # Check if the server has been disabled by Super Admin
+        if message.guild:
+            try:
+                db = get_db()
+                res = await asyncio.to_thread(lambda: db.table("guild_configs").select("is_enabled").eq("guild_id", message.guild.id).execute())
+                if res.data and not res.data[0].get("is_enabled", True):
+                    return
+            except Exception as e:
+                log.warning(f"Failed to check if server is enabled: {e}")
 
         # Blocked DMs for registered users
         if isinstance(message.channel, discord.DMChannel):
@@ -419,8 +421,15 @@ class AI(commands.Cog, name="AI"):
 
         try:
             async with message.channel.typing():
+                # Rate limit check
+                if self._is_rate_limited(message.author.id, settings.get('rate_limit_count', 5), settings.get('rate_limit_window', 60)):
+                    await message.reply("You're speaking too fast. Slow down, please.")
+                    self.active_throttled += 1
+                    return
+                
                 # 1. Gather context & Dossier
-                dynamic_system_instruction = await self._get_user_context(message.author)
+                base_prompt = settings.get('system_prompt', "You are Catalog, a funny, slightly unhinged Discord librarian who occasionally ragebaits and stirs the pot, but ultimately remains a helpful assistant. Keep your responses concise for Discord chat. Add humor and light sarcasm.")
+                dynamic_system_instruction = base_prompt + "\n" + await self._get_user_context(message.author)
                 
                 # 2. Build history & attachments
                 contents = await self._prepare_chat_contents(message, clean_prompt)
@@ -477,10 +486,15 @@ class AI(commands.Cog, name="AI"):
         except Exception as e:
             log.warning(f"Failed to fetch user context: {e}")
 
+        shared_guilds = [g.name for g in self.bot.guilds if g.get_member(author.id)]
+        shared_guilds_text = ""
+        if shared_guilds:
+            shared_guilds_text = f"\nServers you share with this user: {', '.join(shared_guilds)}"
+
         return (
             f"{self.system_instruction}\n\n"
             f"You are currently talking to: {author.display_name}."
-            f"{dossier_text}{flags_text}"
+            f"{dossier_text}{flags_text}{shared_guilds_text}"
         )
 
     async def _prepare_chat_contents(self, message: discord.Message, clean_prompt: str) -> list:

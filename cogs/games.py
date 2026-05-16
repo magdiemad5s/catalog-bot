@@ -141,6 +141,7 @@ class MinesweeperView(discord.ui.View):
         try:
             db = get_db()
             db.table("minesweeper_sessions").insert({
+                "guild_id": getattr(interaction.guild, "id", 0),
                 "user_id": self.user_id,
                 "difficulty": self.difficulty,
                 "score": score,
@@ -265,6 +266,7 @@ class Games(commands.Cog):
         try:
              db.table("roulette_sessions").insert({
                  "session_id": session_id,
+                 "guild_id": getattr(ctx.guild, "id", 0),
                  "host_user_id": ctx.author.id,
                  "players": [p.id for p in players],
                  "xp_pool": xp_pool
@@ -317,13 +319,11 @@ class Games(commands.Cog):
         
         if game == "minesweeper":
             # Top by total score
-            res = db.rpc('get_minesweeper_leaderboard').execute() # We'll need a SQL view or just query
-            # For now, let's just query normally
-            res = db.table("minesweeper_sessions").select("user_id, score").eq("won", True).order("score", desc=True).limit(10).execute()
+            res = db.table("minesweeper_sessions").select("user_id, score").eq("guild_id", ctx.guild.id).eq("won", True).order("score", desc=True).limit(10).execute()
             data = res.data
         else:
             # Top by XP won
-            res = db.table("roulette_sessions").select("winner_user_ids, xp_won_each").order("xp_won_each", desc=True).limit(10).execute()
+            res = db.table("roulette_sessions").select("winner_user_ids, xp_won_each").eq("guild_id", ctx.guild.id).order("xp_won_each", desc=True).limit(10).execute()
             data = []
             for row in res.data:
                 winners = row.get("winner_user_ids", [])

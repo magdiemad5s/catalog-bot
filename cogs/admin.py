@@ -46,17 +46,26 @@ class Admin(commands.Cog, name="Admin"):
         try:
             from db.client import get_db
             db = get_db()
-            # We use asyncio.to_thread because supabase-py is synchronous
             import asyncio
+            
+            # Check if username exists
+            res = await asyncio.to_thread(
+                lambda: db.table("admin_users").select("id").eq("username", username).execute()
+            )
+            
+            if res.data:
+                await ctx.send(f"❌ The username '**{username}**' is already taken globally across the network. Please choose a different username, or use your Discord ID by typing:\n`/seedadmin {ctx.author.id} {password}`", ephemeral=True)
+                return
+
             await asyncio.to_thread(
-                lambda: db.table("admin_users").upsert({
+                lambda: db.table("admin_users").insert({
                     "username": username,
                     "password_hash": hashed,
                     "role": "GUILD_ADMIN",
                     "guild_id": ctx.guild.id,
                     "requires_password_change": True,
                     "requires_setup": True
-                }, on_conflict="username").execute()
+                }).execute()
             )
             
             await ctx.send(f"✅ Admin account '**{username}**' seeded successfully for this server.\nPlease log in to the web dashboard to complete the mandatory setup.", ephemeral=True)

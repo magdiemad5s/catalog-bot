@@ -31,7 +31,8 @@ async def filter_page(request):
         "config": config,
         "profiles": profiles,
         "logs": logs,
-        "channels": [{"id": c.id, "name": c.name} for g in bot.guilds if g.id == guild_id for c in g.text_channels]
+        "channels": [{"id": c.id, "name": c.name} for g in bot.guilds if g.id == guild_id for c in g.text_channels],
+        "role": session.get("role", "GUILD_ADMIN")
     }
 
 @filter_routes.post("/admin/api/filter/config")
