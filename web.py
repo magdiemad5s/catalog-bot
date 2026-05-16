@@ -140,8 +140,11 @@ async def dashboard(request):
     rules_cog = bot.get_cog("Rules")
     
     db = get_db()
-    res_config = db.table("guild_configs").select("*").eq("guild_id", guild_id).execute()
-    guild_config = res_config.data[0] if res_config.data else {}
+    if guild_id:
+        res_config = db.table("guild_configs").select("*").eq("guild_id", guild_id).execute()
+        guild_config = res_config.data[0] if res_config.data else {}
+    else:
+        guild_config = {}
     
     channels = [{"id": c.id, "name": c.name} for c in guild.text_channels] if guild else []
     
@@ -149,7 +152,7 @@ async def dashboard(request):
     stats = ai_cog.get_stats() if ai_cog else {
         'total_requests': 0, 'total_rate_limits': 0, 'active_throttled': 0
     }
-    rules_text = rules_cog.get_rules_text() if rules_cog else ""
+    rules_text = rules_cog.get_rules_text(guild_id) if rules_cog else ""
     
     telemetry = {
         "guild_count": 1 if guild else 0,

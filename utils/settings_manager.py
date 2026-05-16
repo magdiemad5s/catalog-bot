@@ -32,8 +32,9 @@ def save_settings(data: dict, guild_id: int = None):
     except Exception as e:
         log.error(f"Failed to save settings for {guild_id or 'global'}: {e}")
 
-def get_presets(guild_id: int) -> dict:
-    path = os.path.join(os.path.dirname(SETTINGS_PATH), f"presets_{guild_id}.json")
+def get_presets(guild_id: int = None) -> dict:
+    filename = f"presets_{guild_id}.json" if guild_id else "presets_global.json"
+    path = os.path.join(os.path.dirname(SETTINGS_PATH), filename)
     if not os.path.exists(path): return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -43,7 +44,8 @@ def get_presets(guild_id: int) -> dict:
 def save_preset(guild_id: int, name: str, prompt: str):
     presets = get_presets(guild_id)
     presets[name] = prompt
-    path = os.path.join(os.path.dirname(SETTINGS_PATH), f"presets_{guild_id}.json")
+    filename = f"presets_{guild_id}.json" if guild_id else "presets_global.json"
+    path = os.path.join(os.path.dirname(SETTINGS_PATH), filename)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(presets, f, indent=4)
 
@@ -51,7 +53,8 @@ def delete_preset(guild_id: int, name: str):
     presets = get_presets(guild_id)
     if name in presets:
         del presets[name]
-        path = os.path.join(os.path.dirname(SETTINGS_PATH), f"presets_{guild_id}.json")
+        filename = f"presets_{guild_id}.json" if guild_id else "presets_global.json"
+        path = os.path.join(os.path.dirname(SETTINGS_PATH), filename)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(presets, f, indent=4)
 
@@ -60,6 +63,7 @@ def rename_preset(guild_id: int, old_name: str, new_name: str):
     if old_name in presets:
         prompt = presets.pop(old_name)
         presets[new_name] = prompt
-        path = os.path.join(os.path.dirname(SETTINGS_PATH), f"presets_{guild_id}.json")
+        filename = f"presets_{guild_id}.json" if guild_id else "presets_global.json"
+        path = os.path.join(os.path.dirname(SETTINGS_PATH), filename)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(presets, f, indent=4)
