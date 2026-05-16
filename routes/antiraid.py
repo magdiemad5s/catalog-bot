@@ -14,8 +14,13 @@ async def antiraid_page(request):
     session = await get_session(request)
     guild_id = session.get("guild_id", 0)
     
-    res = db.table("anti_raid_config").select("*").eq("guild_id", guild_id).execute()
-    config = res.data[0] if res.data else {
+    if guild_id:
+        res = db.table("anti_raid_config").select("*").eq("guild_id", guild_id).execute()
+        config_data = res.data[0] if res.data else None
+    else:
+        config_data = None
+        
+    config = config_data if config_data else {
         "guild_id": guild_id,
         "enabled": False,
         "account_age_min_days": 7,

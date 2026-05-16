@@ -13,8 +13,11 @@ async def xp_boost_page(request):
     role = session.get("role", "GUILD_ADMIN")
     
     db = get_db()
-    res = db.table("xp_role_boosts").select("*").eq("guild_id", guild_id).execute()
-    boosts = res.data if res.data else []
+    if guild_id:
+        res = db.table("xp_role_boosts").select("*").eq("guild_id", guild_id).execute()
+        boosts = res.data if res.data else []
+    else:
+        boosts = []
     
     return {
         "active_page": "xp",

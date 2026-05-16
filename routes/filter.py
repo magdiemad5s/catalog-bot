@@ -13,18 +13,29 @@ async def filter_page(request):
     session = await get_session(request)
     guild_id = session.get("guild_id", 0)
     # Get config
-    res_config = db.table("filter_config").select("*").eq("guild_id", guild_id).execute()
-    config = res_config.data[0] if res_config.data else {
+    if guild_id:
+        res_config = db.table("filter_config").select("*").eq("guild_id", guild_id).execute()
+        config_data = res_config.data[0] if res_config.data else None
+    else:
+        config_data = None
+        
+    config = config_data if config_data else {
         "guild_id": guild_id, "enabled": False, "active_profile_id": None, "threshold": 3, "mod_channel_id": None
     }
     
     # Get profiles
-    res_profiles = db.table("filter_profiles").select("*").eq("guild_id", guild_id).execute()
-    profiles = res_profiles.data if res_profiles.data else []
+    if guild_id:
+        res_profiles = db.table("filter_profiles").select("*").eq("guild_id", guild_id).execute()
+        profiles = res_profiles.data if res_profiles.data else []
+    else:
+        profiles = []
     
     # Get logs (top 50)
-    res_logs = db.table("filter_log").select("*").eq("guild_id", guild_id).order("created_at", desc=True).limit(50).execute()
-    logs = res_logs.data if res_logs.data else []
+    if guild_id:
+        res_logs = db.table("filter_log").select("*").eq("guild_id", guild_id).order("created_at", desc=True).limit(50).execute()
+        logs = res_logs.data if res_logs.data else []
+    else:
+        logs = []
     
     return {
         "active_page": "filter",
