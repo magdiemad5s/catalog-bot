@@ -130,20 +130,13 @@ create table if not exists ai_interactions (
 
 -- ── XP Boosts ────────────────────────────────────────────────────────────────
 create table if not exists xp_role_boosts (
-    role_id     bigint  primary key,
+    guild_id    bigint  not null,
+    role_id     bigint  not null,
     multiplier  float   not null default 1.1,
     label       text    not null,
-    enabled     boolean not null default true
+    enabled     boolean not null default true,
+    primary key (guild_id, role_id)
 );
-
--- Default boosters
-insert into xp_role_boosts (role_id, multiplier, label, enabled)
-values (1492319450899157094, 1.10, 'Library Member', true)
-on conflict (role_id) do nothing;
-
-insert into xp_role_boosts (role_id, multiplier, label, enabled)
-values (1482721503597297775, 1.10, 'Golden Leaf', true)
-on conflict (role_id) do nothing;
 
 -- ── Anti-Raid ────────────────────────────────────────────────────────────────
 create table if not exists anti_raid_config (
@@ -214,5 +207,48 @@ create table if not exists admin_users (
     id            bigserial    primary key,
     username      text         unique not null,
     password_hash text         not null,
+    role          text         not null default 'GUILD_ADMIN', -- 'SUPER_ADMIN' or 'GUILD_ADMIN'
+    guild_id      bigint,                                      -- NULL if SUPER_ADMIN
+    requires_password_change boolean not null default false,
+    requires_setup           boolean not null default false,
     created_at    timestamptz  not null default now()
 );
+
+-- ── Guild Global Configurations ─────────────────────────────────────────────
+create table if not exists guild_configs (
+    guild_id                bigint  primary key,
+    is_enabled              boolean not null default true,
+    announcement_channel_id bigint,
+    mod_channel_id          bigint,
+    card_channel_id         bigint,
+    rules_channel_id        bigint,
+    giveaway_channel_id     bigint,
+    mod_role_id             bigint
+);
+
+-- ── MIGRATIONS FOR EXISTING DATABASES ───────────────────────────────────────
+-- If you have already run the previous version of schema.sql, 
+-- run the following block in Supabase SQL Editor to upgrade your tables:
+
+/*
+ALTER TABLE admin_users 
+ADD COLUMN IF NOT EXISTS role text not null default 'GUILD_ADMIN',
+ADD COLUMN IF NOT EXISTS guild_id bigint,
+ADD COLUMN IF NOT EXISTS requires_password_change boolean not null default false,
+ADD COLUMN IF NOT EXISTS requires_setup boolean not null default false;
+
+-- NOTE: If you have existing admins, you should manually upgrade one to 'SUPER_ADMIN'
+-- UPDATE admin_users SET role = 'SUPER_ADMIN' WHERE username = 'YOUR_CURRENT_ADMIN';
+
+-- For xp_role_boosts, we need to drop the table and recreate it because the primary key changed.
+-- WARNING: This deletes existing role boosts!
+DROP TABLE IF EXISTS xp_role_boosts;
+CREATE TABLE xp_role_boosts (
+    guild_id    bigint  not null,
+    role_id     bigint  not null,
+    multiplier  float   not null default 1.1,
+    label       text    not null,
+    enabled     boolean not null default true,
+    primary key (guild_id, role_id)
+);
+*/

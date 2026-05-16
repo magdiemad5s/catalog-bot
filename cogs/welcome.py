@@ -291,8 +291,16 @@ class Welcome(commands.Cog, name="Welcome"):
                 member = guild.get_member(user.id)
                 if not member: 
                     continue
-                # Specific channel ID provided by user
-                mod_channel = guild.get_channel(1482973008812441623)
+                # Fetch from database
+                mod_channel = None
+                try:
+                    db = get_db()
+                    res = db.table("guild_configs").select("mod_channel_id").eq("guild_id", guild.id).execute()
+                    if res.data and res.data[0].get("mod_channel_id"):
+                        mod_channel = guild.get_channel(int(res.data[0]["mod_channel_id"]))
+                except Exception as e:
+                    log.warning(f"Failed to fetch mod_channel_id for guild {guild.id}: {e}")
+                
                 # Fallback purely for safety just in case
                 if not mod_channel:
                     mod_channel = discord.utils.get(guild.text_channels, name="mod-logs") or discord.utils.get(guild.text_channels, name="moderators")
@@ -326,7 +334,15 @@ class Welcome(commands.Cog, name="Welcome"):
             if not member: 
                 continue
                 
-            card_channel = guild.get_channel(1482736369024503808)
+            card_channel = None
+            try:
+                db = get_db()
+                res = db.table("guild_configs").select("card_channel_id").eq("guild_id", guild.id).execute()
+                if res.data and res.data[0].get("card_channel_id"):
+                    card_channel = guild.get_channel(int(res.data[0]["card_channel_id"]))
+            except Exception as e:
+                log.warning(f"Failed to fetch card_channel_id for guild {guild.id}: {e}")
+
             if not card_channel:
                 card_channel = discord.utils.get(guild.text_channels, name="library-cards")
             if not card_channel:
@@ -445,7 +461,15 @@ class Welcome(commands.Cog, name="Welcome"):
                 card_content = parts[2]
                 
                 # Post to destination
-                card_channel = guild.get_channel(1482736369024503808)
+                card_channel = None
+                try:
+                    db = get_db()
+                    res = db.table("guild_configs").select("card_channel_id").eq("guild_id", guild.id).execute()
+                    if res.data and res.data[0].get("card_channel_id"):
+                        card_channel = guild.get_channel(int(res.data[0]["card_channel_id"]))
+                except Exception as e:
+                    pass
+
                 if not card_channel:
                     card_channel = discord.utils.get(guild.text_channels, name="library-cards")
                 if not card_channel:

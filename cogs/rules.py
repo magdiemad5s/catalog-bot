@@ -16,8 +16,6 @@ from utils.settings_manager import load_settings, save_settings
 
 log = logging.getLogger(__name__)
 
-# Channel where rules are posted — update this to your server's rules channel ID
-RULES_CHANNEL_ID = 1482736366990262283  # Reuses the library-cards channel as fallback
 HEADER = "📜 **Server Rules**\n\n"
 
 
@@ -50,11 +48,20 @@ class Rules(commands.Cog, name="Rules"):
 
         # Post to every guild's rules channel
         for guild in self.bot.guilds:
-            channel = guild.get_channel(RULES_CHANNEL_ID)
+            channel = None
+            try:
+                from db.client import get_db
+                db = get_db()
+                res = db.table("guild_configs").select("rules_channel_id").eq("guild_id", guild.id).execute()
+                if res.data and res.data[0].get("rules_channel_id"):
+                    channel = guild.get_channel(int(res.data[0]["rules_channel_id"]))
+            except Exception as e:
+                pass
+
             if not channel:
                 channel = discord.utils.get(guild.text_channels, name="rules")
             if not channel:
-                log.warning(f"No rules channel found in {guild.name}. Tried ID={RULES_CHANNEL_ID} and name='rules'.")
+                log.warning(f"No rules channel found in {guild.name}.")
                 continue
 
             log.info(f"Found rules channel: #{channel.name} ({channel.id}) in {guild.name}")

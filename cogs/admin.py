@@ -22,12 +22,16 @@ class Admin(commands.Cog, name="Admin"):
         self.bot = bot
 
     @commands.hybrid_command(name="seedadmin", description="Seed a new admin account for the web panel.")
-    @commands.is_owner()
+    @commands.has_permissions(administrator=True)
     async def seedadmin(self, ctx: commands.Context, username: str, password: str):
         """Securely hashes and stores an admin credential into the database.
         
         Recommended to use as a slash command or in a private channel.
         """
+        if not ctx.guild:
+            await ctx.send("❌ This command must be used in a server.", ephemeral=True)
+            return
+
         # Delete message if it's a prefix command to protect the password
         if ctx.interaction is None:
             try:
@@ -47,12 +51,16 @@ class Admin(commands.Cog, name="Admin"):
             await asyncio.to_thread(
                 lambda: db.table("admin_users").upsert({
                     "username": username,
-                    "password_hash": hashed
+                    "password_hash": hashed,
+                    "role": "GUILD_ADMIN",
+                    "guild_id": ctx.guild.id,
+                    "requires_password_change": True,
+                    "requires_setup": True
                 }, on_conflict="username").execute()
             )
             
-            await ctx.send(f"✅ Admin account '**{username}**' seeded successfully.", ephemeral=True)
-            log.info(f"Admin account '{username}' seeded by {ctx.author}.")
+            await ctx.send(f"✅ Admin account '**{username}**' seeded successfully for this server.\nPlease log in to the web dashboard to complete the mandatory setup.", ephemeral=True)
+            log.info(f"Admin account '{username}' seeded by {ctx.author} for guild {ctx.guild.id}.")
         except Exception as e:
             await ctx.send(f"❌ Database error: {e}", ephemeral=True)
             log.error(f"Failed to seed admin: {e}")

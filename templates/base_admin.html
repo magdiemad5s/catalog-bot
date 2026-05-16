@@ -111,6 +111,13 @@
             <h1><span>S.E.R.A.</span> Hub</h1>
         </div>
         <nav class="sidebar-nav">
+            {% if role == 'SUPER_ADMIN' %}
+            <a href="/superadmin" class="nav-item {% if active_page == 'superadmin' %}active{% endif %}" style="background: rgba(239, 68, 68, 0.1); border-left: 3px solid var(--danger);">
+                <i class="fas fa-crown" style="color: var(--danger);"></i> Super Admin
+            </a>
+            <hr style="border: 0; border-top: 1px solid var(--surface-border); margin: 0.5rem 0;">
+            {% endif %}
+            
             <a href="/admin" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
                 <i class="fas fa-chart-line"></i> Dashboard
             </a>

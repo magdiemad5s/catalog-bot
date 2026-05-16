@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Setup | Catalog Bot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .setup-container { max-width: 500px; width: 100%; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .brand-text { color: #6366f1; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <h3 class="mb-4 text-center brand-text">Onboarding Setup</h3>
+        <p class="text-muted text-center">Please complete the following steps to finish your account setup.</p>
+        
+        <form id="setupForm">
+            {% if requires_password_change %}
+            <div class="mb-4">
+                <h5>1. Update Your Password</h5>
+                <p class="text-muted small">You are using a temporary password. Please set a new one.</p>
+                <div class="mb-3">
+                    <label class="form-label">New Password</label>
+                    <input type="password" class="form-control" id="new_password" required minlength="6">
+                </div>
+            </div>
+            {% endif %}
+
+            {% if requires_setup %}
+            <div class="mb-4">
+                <h5>2. Server Configuration</h5>
+                <p class="text-muted small">Select the channels for your server features.</p>
+                
+                <div class="mb-3">
+                    <label class="form-label">Announcement Channel</label>
+                    <select class="form-select" id="announcement_channel_id" required>
+                        <option value="">Select a channel...</option>
+                        {% for c in channels %}
+                        <option value="{{ c.id }}">#{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Rules Channel</label>
+                    <select class="form-select" id="rules_channel_id" required>
+                        <option value="">Select a channel...</option>
+                        {% for c in channels %}
+                        <option value="{{ c.id }}">#{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Moderator/Logs Channel</label>
+                    <select class="form-select" id="mod_channel_id" required>
+                        <option value="">Select a channel...</option>
+                        {% for c in channels %}
+                        <option value="{{ c.id }}">#{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Library Cards Channel</label>
+                    <select class="form-select" id="card_channel_id" required>
+                        <option value="">Select a channel...</option>
+                        {% for c in channels %}
+                        <option value="{{ c.id }}">#{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Giveaway Channel</label>
+                    <select class="form-select" id="giveaway_channel_id" required>
+                        <option value="">Select a channel...</option>
+                        {% for c in channels %}
+                        <option value="{{ c.id }}">#{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="alert alert-danger d-none" id="errorMsg"></div>
+            
+            <button type="submit" class="btn btn-primary w-100" id="submitBtn">Complete Setup</button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('setupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const errorMsg = document.getElementById('errorMsg');
+            
+            btn.disabled = true;
+            btn.innerText = 'Saving...';
+            errorMsg.classList.add('d-none');
+            
+            const payload = {};
+            
+            {% if requires_password_change %}
+            payload.new_password = document.getElementById('new_password').value;
+            {% endif %}
+            
+            {% if requires_setup %}
+            payload.announcement_channel_id = document.getElementById('announcement_channel_id').value;
+            payload.rules_channel_id = document.getElementById('rules_channel_id').value;
+            payload.mod_channel_id = document.getElementById('mod_channel_id').value;
+            payload.card_channel_id = document.getElementById('card_channel_id').value;
+            payload.giveaway_channel_id = document.getElementById('giveaway_channel_id').value;
+            {% endif %}
+            
+            try {
+                const res = await fetch('/admin/api/setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    window.location.href = '/admin';
+                } else {
+                    errorMsg.innerText = data.error || 'An error occurred';
+                    errorMsg.classList.remove('d-none');
+                    btn.disabled = false;
+                    btn.innerText = 'Complete Setup';
+                }
+            } catch (err) {
+                errorMsg.innerText = 'Network error occurred';
+                errorMsg.classList.remove('d-none');
+                btn.disabled = false;
+                btn.innerText = 'Complete Setup';
+            }
+        });
+    </script>
+</body>
+</html>

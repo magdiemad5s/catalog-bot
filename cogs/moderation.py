@@ -29,8 +29,19 @@ def has_mod_role():
         # Server owner always passes
         if ctx.guild and ctx.author == ctx.guild.owner:
             return True
-        # Prefer config from .env, fall back to hardcoded default
+        # Prefer config from database, fall back to hardcoded default
         mod_role_id = getattr(getattr(ctx.bot, 'config', None), 'mod_role_id', 0) or DEFAULT_MOD_ROLE_ID
+        if ctx.guild:
+            try:
+                from db.client import get_db
+                import asyncio
+                db = get_db()
+                res = await asyncio.to_thread(lambda: db.table("guild_configs").select("mod_role_id").eq("guild_id", ctx.guild.id).execute())
+                if res.data and res.data[0].get("mod_role_id"):
+                    mod_role_id = int(res.data[0]["mod_role_id"])
+            except Exception as e:
+                log.warning(f"Failed to fetch mod_role_id for guild {ctx.guild.id}: {e}")
+
         role_ids = [r.id for r in getattr(ctx.author, "roles", [])]
         if mod_role_id not in role_ids:
             raise commands.CheckFailure(

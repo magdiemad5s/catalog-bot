@@ -1,0 +1,136 @@
+{% extends "base_admin.html" %}
+
+{% block page_title %}Super Admin Dashboard{% endblock %}
+
+{% block extra_style %}
+<style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; }
+    
+    .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem; }
+    .stat-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 1.5rem; border-radius: 8px; text-align: center; }
+    .stat-label { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; }
+    .stat-value { font-size: 2.5rem; font-weight: 700; margin-top: 0.5rem; color: #fff; }
+    
+    .server-card {
+        background: var(--surface); border: 1px solid var(--surface-border);
+        border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;
+    }
+    
+    .server-header {
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid var(--surface-border); padding-bottom: 1rem; margin-bottom: 1rem;
+    }
+    .server-name { font-size: 1.25rem; font-weight: 700; margin: 0; }
+    .server-id { font-size: 0.8rem; color: var(--text-muted); font-family: monospace; }
+    
+    .admin-list { margin-top: 1rem; }
+    .admin-item {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 6px; margin-bottom: 0.5rem;
+    }
+    .admin-info { display: flex; flex-direction: column; }
+    .admin-name { font-weight: 600; }
+    .admin-badges { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
+    .badge { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 4px; background: #3f3f46; color: #fff; }
+    .badge.warning { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.5); }
+    
+    .toggle-container { display: flex; align-items: center; gap: 0.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-box">
+        <div class="stat-label">Total Servers</div>
+        <div class="stat-value">{{ total_guilds }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Total Tracked Users</div>
+        <div class="stat-value">{{ total_users }}</div>
+    </div>
+</div>
+
+<h3><i class="fas fa-server"></i> Connected Servers</h3>
+
+<div class="grid">
+    {% for server in servers %}
+    <div class="server-card">
+        <div class="server-header">
+            <div>
+                <h4 class="server-name">{{ server.name }}</h4>
+                <div class="server-id">{{ server.id }} &bull; {{ server.member_count }} members</div>
+            </div>
+            
+            <div class="toggle-container">
+                <label class="switch" style="margin-bottom: 0;">
+                    <input type="checkbox" onchange="toggleServer('{{ server.id }}', this.checked)" {% if server.is_enabled %}checked{% endif %}>
+                    <span class="slider"></span>
+                </label>
+                <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">ACTIVE</span>
+            </div>
+        </div>
+        
+        <h5 style="margin-top: 0; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-muted);">Admin Accounts</h5>
+        <div class="admin-list">
+            {% if server.admins %}
+                {% for admin in server.admins %}
+                <div class="admin-item">
+                    <div class="admin-info">
+                        <span class="admin-name"><i class="fas fa-user-shield"></i> {{ admin.username }}</span>
+                        <div class="admin-badges">
+                            {% if admin.requires_setup %}
+                            <span class="badge warning">Needs Setup</span>
+                            {% endif %}
+                            {% if admin.requires_password_change %}
+                            <span class="badge warning">Needs Password Reset</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <button class="secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;" onclick="resetAccount('{{ admin.username }}')">
+                        <i class="fas fa-undo"></i> Force Reset
+                    </button>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">No specific admin accounts assigned. Only Super Admins can manage this server.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    async function toggleServer(guildId, isEnabled) {
+        try {
+            await API.post('/superadmin/api/toggle_guild', {
+                guild_id: guildId,
+                is_enabled: isEnabled
+            });
+            showToast(`Server ${isEnabled ? 'enabled' : 'disabled'} successfully.`);
+        } catch (err) {
+            showToast(err.message, 'error');
+            // Revert visual state if failed
+            setTimeout(() => location.reload(), 1000);
+        }
+    }
+    
+    async function resetAccount(username) {
+        if (!confirm(`Are you sure you want to force '${username}' to reset their password and re-run setup on their next login?`)) {
+            return;
+        }
+        
+        try {
+            await API.post('/superadmin/api/reset_account', {
+                username: username
+            });
+            showToast(`Account '${username}' flagged for reset.`);
+            setTimeout(() => location.reload(), 1000);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+</script>
+{% endblock %}

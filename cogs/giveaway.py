@@ -312,11 +312,20 @@ class Giveaway(commands.Cog, name="Giveaway"):
         winner = random.choice(candidates)
 
         # ── Find the mod channel ───────────────────────────────────────────────
-        mod_channel = ctx.guild.get_channel(MOD_CHANNEL_ID)
+        mod_channel_id = MOD_CHANNEL_ID
+        try:
+            db = get_db()
+            res = db.table("guild_configs").select("mod_channel_id").eq("guild_id", ctx.guild.id).execute()
+            if res.data and res.data[0].get("mod_channel_id"):
+                mod_channel_id = int(res.data[0]["mod_channel_id"])
+        except Exception:
+            pass
+
+        mod_channel = ctx.guild.get_channel(mod_channel_id)
         if not mod_channel:
             return await ctx.reply(
                 embed=error_embed(
-                    f"Moderator channel (ID: `{MOD_CHANNEL_ID}`) not found. "
+                    f"Moderator channel (ID: `{mod_channel_id}`) not found. "
                     "Please verify the channel ID."
                 )
             )
@@ -349,7 +358,7 @@ class Giveaway(commands.Cog, name="Giveaway"):
             await mod_msg.add_reaction(REACT_EDIT)
         except discord.Forbidden:
             return await ctx.reply(
-                embed=error_embed(f"I can't send messages to <#{MOD_CHANNEL_ID}>.")
+                embed=error_embed(f"I can't send messages to <#{mod_channel_id}>.")
             )
 
         # ── Track pending confirmation ─────────────────────────────────────────
@@ -359,6 +368,7 @@ class Giveaway(commands.Cog, name="Giveaway"):
             "winner":     winner,
             "pool":       candidates,
             "initiator":  ctx.author,
+            "mod_channel_id": mod_channel_id,
             "created_at": time.time(),
         }
 
@@ -366,7 +376,7 @@ class Giveaway(commands.Cog, name="Giveaway"):
             embed=info_embed(
                 "Giveaway Pending Approval",
                 f"A winner has been selected from the **{role.name}** role.\n"
-                f"Moderators in <#{MOD_CHANNEL_ID}> have been notified to review and approve.",
+                f"Moderators in <#{mod_channel_id}> have been notified to review and approve.",
             )
         )
         log.info(
@@ -383,8 +393,20 @@ class Giveaway(commands.Cog, name="Giveaway"):
             return
 
         # Only process reactions in the mod channel
-        if payload.channel_id != MOD_CHANNEL_ID:
-            return
+        mod_channel_id = MOD_CHANNEL_ID
+        try:
+            db = get_db()
+            res = db.table("guild_configs").select("mod_channel_id").eq("guild_id", payload.guild_id).execute()
+            if res.data and res.data[0].get("mod_channel_id"):
+                mod_channel_id = int(res.data[0]["mod_channel_id"])
+        except Exception:
+            pass
+
+        if payload.channel_id != mod_channel_id:
+            # Also check if it matches the tracked giveaway's mod channel, if available
+            data = self._pending_giveaways.get(payload.message_id)
+            if not data or payload.channel_id != data.get("mod_channel_id", mod_channel_id):
+                return
 
         # Only care about messages we're tracking
         if payload.message_id not in self._pending_giveaways:
@@ -421,7 +443,8 @@ class Giveaway(commands.Cog, name="Giveaway"):
             if data is None:
                 return
 
-        mod_channel = guild.get_channel(MOD_CHANNEL_ID)
+        mod_channel_id = data.get("mod_channel_id", payload.channel_id)
+        mod_channel = guild.get_channel(mod_channel_id)
 
         # Fetch the original mod confirmation message so we can delete / update it
         mod_msg = None
@@ -439,11 +462,20 @@ class Giveaway(commands.Cog, name="Giveaway"):
 
         # ── ✅ Post the winner ─────────────────────────────────────────────────
         if emoji == REACT_POST:
-            giveaway_channel = guild.get_channel(GIVEAWAY_CHANNEL_ID)
+            giveaway_channel_id = GIVEAWAY_CHANNEL_ID
+            try:
+                db = get_db()
+                res = db.table("guild_configs").select("giveaway_channel_id").eq("guild_id", guild.id).execute()
+                if res.data and res.data[0].get("giveaway_channel_id"):
+                    giveaway_channel_id = int(res.data[0]["giveaway_channel_id"])
+            except Exception:
+                pass
+                
+            giveaway_channel = guild.get_channel(giveaway_channel_id)
             if not giveaway_channel:
                 if mod_channel:
                     await mod_channel.send(
-                        embed=error_embed(f"Giveaway channel (ID: `{GIVEAWAY_CHANNEL_ID}`) not found!")
+                        embed=error_embed(f"Giveaway channel (ID: `{giveaway_channel_id}`) not found!")
                     )
                 return
 
@@ -492,7 +524,7 @@ class Giveaway(commands.Cog, name="Giveaway"):
             except discord.Forbidden:
                 if mod_channel:
                     await mod_channel.send(
-                        embed=error_embed(f"I can't send messages to <#{GIVEAWAY_CHANNEL_ID}>.")
+                        embed=error_embed(f"I can't send messages to <#{giveaway_channel_id}>.")
                     )
 
             if mod_msg:

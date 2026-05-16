@@ -9,9 +9,9 @@ filter_routes = web.RouteTableDef()
 async def filter_page(request):
     bot = request.app['bot']
     db = get_db()
-    
-    guild_id = bot.guilds[0].id if bot.guilds else 0
-    
+    from aiohttp_session import get_session
+    session = await get_session(request)
+    guild_id = session.get("guild_id", 0)
     # Get config
     res_config = db.table("filter_config").select("*").eq("guild_id", guild_id).execute()
     config = res_config.data[0] if res_config.data else {
@@ -31,16 +31,21 @@ async def filter_page(request):
         "config": config,
         "profiles": profiles,
         "logs": logs,
-        "channels": [{"id": c.id, "name": c.name} for g in bot.guilds for c in g.text_channels]
+        "channels": [{"id": c.id, "name": c.name} for g in bot.guilds if g.id == guild_id for c in g.text_channels]
     }
 
 @filter_routes.post("/admin/api/filter/config")
 async def update_filter_config(request):
+    from aiohttp_session import get_session
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    if not guild_id: return web.json_response({"error": "Unauthorized"}, status=401)
+    
     data = await request.json()
     db = get_db()
     try:
         payload = {
-            "guild_id": int(data.get("guild_id")),
+            "guild_id": guild_id,
             "enabled": bool(data.get("enabled")),
             "threshold": int(data.get("threshold", 3)),
             "active_profile_id": int(data.get("active_profile_id")) if data.get("active_profile_id") else None,
@@ -53,11 +58,16 @@ async def update_filter_config(request):
 
 @filter_routes.post("/admin/api/filter/profiles")
 async def create_profile(request):
+    from aiohttp_session import get_session
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    if not guild_id: return web.json_response({"error": "Unauthorized"}, status=401)
+    
     data = await request.json()
     db = get_db()
     try:
         payload = {
-            "guild_id": int(data.get("guild_id")),
+            "guild_id": guild_id,
             "name": data.get("name"),
             "word_list": data.get("word_list", [])
         }

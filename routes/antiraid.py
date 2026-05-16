@@ -10,9 +10,9 @@ async def antiraid_page(request):
     bot = request.app['bot']
     db = get_db()
     
-    # We only handle one guild for now as per this bot's usual setup
-    # but we search for the config or create a default
-    guild_id = bot.guilds[0].id if bot.guilds else 0
+    from aiohttp_session import get_session
+    session = await get_session(request)
+    guild_id = session.get("guild_id", 0)
     
     res = db.table("anti_raid_config").select("*").eq("guild_id", guild_id).execute()
     config = res.data[0] if res.data else {
@@ -30,19 +30,24 @@ async def antiraid_page(request):
     return {
         "active_page": "antiraid",
         "config": config,
-        "channels": [{"id": c.id, "name": c.name} for g in bot.guilds for c in g.text_channels],
-        "roles": [{"id": r.id, "name": r.name} for g in bot.guilds for r in g.roles if not r.is_default()]
+        "channels": [{"id": c.id, "name": c.name} for g in bot.guilds if g.id == guild_id for c in g.text_channels],
+        "roles": [{"id": r.id, "name": r.name} for g in bot.guilds if g.id == guild_id for r in g.roles if not r.is_default()]
     }
 
 @antiraid_routes.post("/admin/api/antiraid")
 async def update_antiraid(request):
+    from aiohttp_session import get_session
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    if not guild_id: return web.json_response({"error": "Unauthorized"}, status=401)
+    
     data = await request.json()
     db = get_db()
     
     try:
         # Cast types correctly
         payload = {
-            "guild_id": int(data.get("guild_id")),
+            "guild_id": guild_id,
             "enabled": bool(data.get("enabled")),
             "account_age_min_days": int(data.get("account_age_min_days", 7)),
             "join_rate_count": int(data.get("join_rate_count", 5)),

@@ -36,6 +36,11 @@ async def auth_middleware(app, handler):
                 return web.json_response({"error": "Unauthorized"}, status=401)
             raise web.HTTPFound('/login')
         
+        if (session.get('requires_setup') or session.get('requires_password_change')) and not request.path.startswith('/admin/setup') and not request.path.startswith('/admin/api/setup'):
+            if request.path.startswith('/admin/api/'):
+                return web.json_response({"error": "Setup required. Please complete onboarding."}, status=403)
+            raise web.HTTPFound('/admin/setup')
+        
         return await handler(request)
     return middleware
 
@@ -78,7 +83,14 @@ async def login_handler(request):
                 session = await get_session(request)
                 session['logged_in'] = True
                 session['user'] = username
+                session['guild_id'] = admin.get("guild_id")
+                session['role'] = admin.get("role", "GUILD_ADMIN")
+                session['requires_setup'] = admin.get("requires_setup", False)
+                session['requires_password_change'] = admin.get("requires_password_change", False)
                 log.info(f"Admin '{username}' logged in successfully.")
+                
+                if session['requires_setup'] or session['requires_password_change']:
+                    raise web.HTTPFound('/admin/setup')
                 raise web.HTTPFound('/admin')
     except web.HTTPException:
         raise
@@ -98,10 +110,32 @@ async def logout_handler(request):
 
 admin_routes = web.RouteTableDef()
 
+@admin_routes.get("/admin/setup")
+@aiohttp_jinja2.template("setup.html")
+async def setup_page(request):
+    session = await get_session(request)
+    if not session.get("requires_setup") and not session.get("requires_password_change"):
+        raise web.HTTPFound('/admin')
+    
+    bot = request.app['bot']
+    guild_id = session.get("guild_id")
+    guild = bot.get_guild(guild_id) if guild_id else None
+    channels = [{"id": c.id, "name": c.name} for c in guild.text_channels] if guild else []
+    
+    return {
+        "requires_setup": session.get("requires_setup", False),
+        "requires_password_change": session.get("requires_password_change", False),
+        "channels": channels
+    }
+
 @admin_routes.get("/admin")
 @aiohttp_jinja2.template("dashboard.html")
 async def dashboard(request):
     bot = request.app['bot']
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    guild = bot.get_guild(guild_id) if guild_id else None
+    
     ai_cog = bot.get_cog("AI")
     rules_cog = bot.get_cog("Rules")
     
@@ -112,7 +146,7 @@ async def dashboard(request):
     rules_text = rules_cog.get_rules_text() if rules_cog else ""
     
     telemetry = {
-        "guild_count": len(bot.guilds),
+        "guild_count": 1 if guild else 0,
         "latency": round(bot.latency * 1000),
         "uptime": round((time.time() - START_TIME) / 3600, 1),
         "total_requests": stats.get('total_requests', 0),
@@ -125,7 +159,9 @@ async def dashboard(request):
         "stats": telemetry,
         "settings": settings,
         "presets": get_presets(),
-        "rules_text": rules_text
+        "rules_text": rules_text,
+        "guild_name": guild.name if guild else "Unknown Server",
+        "role": session.get("role", "GUILD_ADMIN")
     }
 
 @admin_routes.get("/admin/announcements")
@@ -167,6 +203,123 @@ async def admin_mafia(request):
     }
 
 # --- Admin API Routes ---
+
+@admin_routes.post("/admin/api/setup")
+async def setup_api(request):
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    username = session.get("user")
+    
+    data = await request.json()
+    db = get_db()
+    
+    try:
+        if session.get("requires_password_change"):
+            new_password = data.get("new_password")
+            if not new_password or len(new_password) < 6:
+                return web.json_response({"error": "Password must be at least 6 characters."}, status=400)
+            
+            import bcrypt
+            hashed = await asyncio.to_thread(lambda: bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'))
+            db.table("admin_users").update({"password_hash": hashed, "requires_password_change": False}).eq("username", username).execute()
+            session["requires_password_change"] = False
+            
+        if session.get("requires_setup"):
+            payload = {
+                "guild_id": guild_id,
+                "announcement_channel_id": int(data.get("announcement_channel_id")) if data.get("announcement_channel_id") else None,
+                "rules_channel_id": int(data.get("rules_channel_id")) if data.get("rules_channel_id") else None,
+                "mod_channel_id": int(data.get("mod_channel_id")) if data.get("mod_channel_id") else None,
+                "card_channel_id": int(data.get("card_channel_id")) if data.get("card_channel_id") else None,
+                "giveaway_channel_id": int(data.get("giveaway_channel_id")) if data.get("giveaway_channel_id") else None
+            }
+            db.table("guild_configs").upsert(payload).execute()
+            db.table("admin_users").update({"requires_setup": False}).eq("username", username).execute()
+            session["requires_setup"] = False
+            
+        return web.json_response({"success": True})
+    except Exception as e:
+        log.error(f"Setup error: {e}")
+        return web.json_response({"error": str(e)}, status=400)
+
+# --- SuperAdmin Routes ---
+
+@admin_routes.get("/superadmin")
+@aiohttp_jinja2.template("superadmin.html")
+async def superadmin_page(request):
+    session = await get_session(request)
+    if session.get("role") != "SUPER_ADMIN":
+        raise web.HTTPFound('/admin')
+        
+    bot = request.app['bot']
+    db = get_db()
+    
+    # Fetch all configs
+    res_configs = db.table("guild_configs").select("*").execute()
+    configs = {row["guild_id"]: row for row in res_configs.data} if res_configs.data else {}
+    
+    # Fetch all admins
+    res_admins = db.table("admin_users").select("id, username, role, guild_id, requires_setup, requires_password_change").execute()
+    admins = res_admins.data if res_admins.data else []
+    
+    servers = []
+    for guild in bot.guilds:
+        c = configs.get(guild.id, {})
+        server_admins = [a for a in admins if a.get("guild_id") == guild.id]
+        servers.append({
+            "id": guild.id,
+            "name": guild.name,
+            "member_count": guild.member_count,
+            "is_enabled": c.get("is_enabled", True),
+            "admins": server_admins
+        })
+        
+    return {
+        "active_page": "superadmin",
+        "servers": servers,
+        "total_guilds": len(bot.guilds),
+        "total_users": sum(g.member_count for g in bot.guilds),
+        "role": "SUPER_ADMIN"
+    }
+
+@admin_routes.post("/superadmin/api/toggle_guild")
+async def toggle_guild_api(request):
+    session = await get_session(request)
+    if session.get("role") != "SUPER_ADMIN":
+        return web.json_response({"error": "Unauthorized"}, status=403)
+        
+    data = await request.json()
+    guild_id = data.get("guild_id")
+    is_enabled = data.get("is_enabled")
+    
+    if not guild_id:
+        return web.json_response({"error": "Missing guild_id"}, status=400)
+        
+    db = get_db()
+    try:
+        db.table("guild_configs").upsert({"guild_id": int(guild_id), "is_enabled": bool(is_enabled)}).execute()
+        return web.json_response({"success": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+@admin_routes.post("/superadmin/api/reset_account")
+async def reset_account_api(request):
+    session = await get_session(request)
+    if session.get("role") != "SUPER_ADMIN":
+        return web.json_response({"error": "Unauthorized"}, status=403)
+        
+    data = await request.json()
+    username = data.get("username")
+    
+    if not username:
+        return web.json_response({"error": "Missing username"}, status=400)
+        
+    db = get_db()
+    try:
+        db.table("admin_users").update({"requires_password_change": True, "requires_setup": True}).eq("username", username).execute()
+        return web.json_response({"success": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
 
 @admin_routes.post("/admin/api/settings")
 async def update_settings_api(request):
@@ -234,8 +387,19 @@ async def announce_live_api(request):
     ping_type = data.get("ping_type", "none")
     role_id = data.get("role_id", "").strip()
     
-    target_channel_id = 1482736373130727536
-    channel = bot.get_channel(target_channel_id)
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    db = get_db()
+    target_channel_id = None
+    try:
+        res = db.table("guild_configs").select("announcement_channel_id").eq("guild_id", guild_id).execute()
+        if res.data and res.data[0].get("announcement_channel_id"):
+            target_channel_id = int(res.data[0]["announcement_channel_id"])
+    except Exception:
+        pass
+        
+    channel = bot.get_channel(target_channel_id) if target_channel_id else None
+    
     
     if channel:
         content = ""
@@ -283,8 +447,18 @@ async def post_announcement_api(request):
     color_hex = data.get("color", "#6366f1")
     image_url = data.get("image_url", "").strip()
     
-    target_channel_id = 1482736370291183759
-    channel = bot.get_channel(target_channel_id)
+    session = await get_session(request)
+    guild_id = session.get("guild_id")
+    db = get_db()
+    target_channel_id = None
+    try:
+        res = db.table("guild_configs").select("announcement_channel_id").eq("guild_id", guild_id).execute()
+        if res.data and res.data[0].get("announcement_channel_id"):
+            target_channel_id = int(res.data[0]["announcement_channel_id"])
+    except Exception:
+        pass
+        
+    channel = bot.get_channel(target_channel_id) if target_channel_id else None
     
     if channel:
         import io
