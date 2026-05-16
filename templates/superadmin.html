@@ -80,7 +80,10 @@
             </div>
         </div>
         
-        <h5 style="margin-top: 0; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-muted);">Admin Accounts</h5>
+        <h5 style="margin-top: 0; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
+            Admin Accounts
+            <button class="primary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="addAdmin('{{ server.id }}')"><i class="fas fa-plus"></i> Add Admin</button>
+        </h5>
         <div class="admin-list">
             {% if server.admins %}
                 {% for admin in server.admins %}
@@ -132,14 +135,37 @@
         }
     }
     
+    async function addAdmin(guildId) {
+        const username = prompt("Enter a globally unique username for the new admin:");
+        if (!username) return;
+        const password = prompt("Enter an initial password for the new admin:");
+        if (!password) return;
+        
+        try {
+            await API.post('/superadmin/api/create_admin', {
+                guild_id: guildId,
+                username: username,
+                password: password
+            });
+            showToast(`Account '${username}' created.`);
+            setTimeout(() => location.reload(), 1000);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
     async function resetAccount(username) {
-        if (!confirm(`Are you sure you want to force '${username}' to reset their password and re-run setup on their next login?`)) {
+        const newPassword = prompt(`Enter a new temporary password for '${username}'. They will be forced to change it on their next login:`);
+        if (!newPassword) return;
+        
+        if (!confirm(`Are you sure you want to change '${username}'s password and force them to re-run setup?`)) {
             return;
         }
         
         try {
             await API.post('/superadmin/api/reset_account', {
-                username: username
+                username: username,
+                new_password: newPassword
             });
             showToast(`Account '${username}' flagged for reset.`);
             setTimeout(() => location.reload(), 1000);

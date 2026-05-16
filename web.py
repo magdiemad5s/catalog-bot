@@ -313,6 +313,45 @@ async def toggle_guild_api(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+@admin_routes.post("/superadmin/api/create_admin")
+async def create_admin_api(request):
+    session = await get_session(request)
+    if session.get("role") != "SUPER_ADMIN":
+        return web.json_response({"error": "Unauthorized"}, status=403)
+        
+    data = await request.json()
+    guild_id = data.get("guild_id")
+    username = data.get("username")
+    password = data.get("password")
+    
+    if not username or not password or not guild_id:
+        return web.json_response({"error": "Missing required fields"}, status=400)
+        
+    db = get_db()
+    try:
+        # Check if username exists
+        import asyncio
+        res = await asyncio.to_thread(lambda: db.table("admin_users").select("id").eq("username", username).execute())
+        if res.data:
+            return web.json_response({"error": "Username is already taken."}, status=400)
+            
+        import bcrypt
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+        
+        await asyncio.to_thread(lambda: db.table("admin_users").insert({
+            "username": username,
+            "password_hash": hashed,
+            "role": "GUILD_ADMIN",
+            "guild_id": int(guild_id),
+            "requires_password_change": True,
+            "requires_setup": True
+        }).execute())
+        
+        return web.json_response({"success": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 @admin_routes.post("/superadmin/api/reset_account")
 async def reset_account_api(request):
     session = await get_session(request)
@@ -321,13 +360,23 @@ async def reset_account_api(request):
         
     data = await request.json()
     username = data.get("username")
+    new_password = data.get("new_password")
     
-    if not username:
-        return web.json_response({"error": "Missing username"}, status=400)
+    if not username or not new_password:
+        return web.json_response({"error": "Missing required fields"}, status=400)
         
     db = get_db()
     try:
-        db.table("admin_users").update({"requires_password_change": True, "requires_setup": True}).eq("username", username).execute()
+        import bcrypt
+        import asyncio
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(new_password.encode('utf-8'), salt).decode('utf-8')
+        
+        await asyncio.to_thread(lambda: db.table("admin_users").update({
+            "password_hash": hashed,
+            "requires_password_change": True, 
+            "requires_setup": True
+        }).eq("username", username).execute())
         return web.json_response({"success": True})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
