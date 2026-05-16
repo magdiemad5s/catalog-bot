@@ -69,13 +69,13 @@
     <div class="modal-content">
         <h3 style="margin-top: 0;">Configure New Multiplier</h3>
         <form id="add_boost_form" onsubmit="submitBoost(event)">
-            <label>Role ID</label>
+            <label>Role ID <span class="help-icon" data-tooltip="The Discord Role ID to apply this XP multiplier to. Right-click the role in Discord → 'Copy Role ID' (requires Developer Mode enabled in Discord Settings).">?</span></label>
             <input type="text" name="role_id" placeholder="e.g. 1492319450899157094" required>
             
-            <label>Multiplier (e.g. 1.10 for 10%)</label>
+            <label>Multiplier (e.g. 1.10 for 10%) <span class="help-icon" data-tooltip="How much to multiply the base XP earned. 1.0 = no change, 1.5 = 50% bonus, 2.0 = double XP. Users with this role earn XP at this rate.">?</span></label>
             <input type="number" name="multiplier" step="0.01" value="1.10" required>
             
-            <label>Label</label>
+            <label>Label <span class="help-icon" data-tooltip="A friendly display name for this booster rule shown in the dashboard (e.g. 'Library Member' or 'Server Booster'). Not shown to users in Discord.">?</span></label>
             <input type="text" name="label" placeholder="e.g. Library Member" required>
             
             <div style="display: flex; gap: 1rem; margin-top: 1rem;">

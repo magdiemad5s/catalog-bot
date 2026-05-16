@@ -100,6 +100,65 @@
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--primary); }
         input:checked + .slider:before { transform: translateX(20px); }
+
+        /* ── Global Tooltip System ── */
+        [data-tooltip] { position: relative; cursor: help; }
+        [data-tooltip]::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1c1c1f;
+            color: #e4e4e7;
+            border: 1px solid #3f3f46;
+            padding: 0.6rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 400;
+            line-height: 1.5;
+            white-space: normal;
+            width: max-content;
+            max-width: 280px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            transform: translateX(-50%) translateY(4px);
+            z-index: 9999;
+        }
+        [data-tooltip]::before {
+            content: '';
+            position: absolute;
+            bottom: calc(100% + 2px);
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: #3f3f46;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease;
+            z-index: 9999;
+        }
+        [data-tooltip]:hover::after,
+        [data-tooltip]:hover::before {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+        /* Help icon style */
+        .help-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 16px; height: 16px;
+            background: rgba(99, 102, 241, 0.2); color: var(--primary);
+            border-radius: 50%; font-size: 0.65rem; font-weight: 700;
+            margin-left: 0.4rem; cursor: help; vertical-align: middle;
+            transition: background 0.2s;
+            position: relative;
+        }
+        .help-icon:hover { background: rgba(99, 102, 241, 0.4); }
     </style>
     {% block extra_style %}{% endblock %}
 </head>

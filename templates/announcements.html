@@ -81,7 +81,7 @@
         <h3><i class="fas fa-edit"></i> Compose Announcement</h3>
         <form id="announcement_form" onsubmit="postAnnouncement(event)" enctype="multipart/form-data">
             
-            <label>Message Mode</label>
+            <label>Message Mode <span class="help-icon" data-tooltip="Controls what the bot sends. 'Both' sends a normal text message AND a rich embed. 'Embed Only' sends just the formatted card. 'Normal Text Only' sends a plain message.">?</span></label>
             <select name="mode" id="inp_mode" onchange="toggleMode()">
                 <option value="both">Both (Normal + Embed)</option>
                 <option value="embed">Embed Only</option>
@@ -89,7 +89,7 @@
             </select>
             
             <div id="section_normal" style="margin-top: 1rem;">
-                <label>Normal Message Content</label>
+                <label>Normal Message Content <span class="help-icon" data-tooltip="The plain text message sent before the embed. Useful for pinging roles (e.g. @everyone) or adding context above the embed card.">?</span></label>
                 <div class="format-toolbar">
                     <button type="button" class="format-btn emoji-picker-btn" onclick="toggleEmojiPicker('inp_normal_content')"><i class="fas fa-smile"></i></button>
                     <div class="emoji-picker-container" id="emoji_picker_inp_normal_content"></div>
@@ -98,7 +98,7 @@
             </div>
             
             <div id="section_embed" style="margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid var(--surface-border);">
-                <label>Embed Title</label>
+                <label>Embed Title <span class="help-icon" data-tooltip="The bold heading shown at the top of the Discord embed card.">?</span></label>
                 <input type="text" name="title" id="inp_title" oninput="updatePreview()" placeholder="Server Update!">
                 
                 <label style="display:flex; justify-content:space-between; align-items:center;">
@@ -121,24 +121,24 @@
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                     <div>
-                        <label>Embed Color</label>
+                        <label>Embed Color <span class="help-icon" data-tooltip="The accent color shown as a left border on the Discord embed card.">?</span></label>
                         <input type="color" name="color" id="inp_color" value="#6366f1" oninput="updatePreview()" style="height: 40px; padding: 0.2rem;">
                     </div>
                     <div>
-                        <label>Image URL (Optional)</label>
+                        <label>Image URL (Optional) <span class="help-icon" data-tooltip="A direct link to an image that will appear inside the embed card. Leave blank for no image.">?</span></label>
                         <input type="url" name="image_url" id="inp_image" oninput="updatePreview()" placeholder="https://...">
                     </div>
                 </div>
             </div>
             
             <div style="margin-top: 1rem;">
-                <label>Attachments (Upload Images/Files)</label>
+                <label>Attachments (Upload Images/Files) <span class="help-icon" data-tooltip="Upload image files to send directly in the Discord message as attachments (not inside the embed). Multiple files supported.">?</span></label>
                 <input type="file" name="attachments" id="inp_files" multiple accept="image/*" onchange="updatePreview()">
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
                 <div>
-                    <label>Ping Mention</label>
+                    <label>Ping Mention <span class="help-icon" data-tooltip="Who to ping when this announcement is posted. '@everyone' notifies all server members. 'Specific Role' lets you target a single role by ID.">?</span></label>
                     <select name="ping_type" id="inp_ping" onchange="updatePreview()">
                         <option value="none">No Ping</option>
                         <option value="everyone">@everyone</option>
@@ -146,7 +146,7 @@
                     </select>
                 </div>
                 <div id="ping_role_div" style="display: none;">
-                    <label>Role ID</label>
+                    <label>Role ID <span class="help-icon" data-tooltip="The Discord Role ID to ping. Right-click the role in Discord → 'Copy Role ID' (requires Developer Mode enabled in Discord settings).">?</span></label>
                     <input type="text" name="role_id" id="inp_role" oninput="updatePreview()" placeholder="123456789...">
                 </div>
             </div>

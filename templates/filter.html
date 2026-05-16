@@ -65,14 +65,14 @@
             <form onsubmit="saveConfig(event)">
                 <input type="hidden" name="guild_id" value="{{ config.guild_id }}">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <label style="margin: 0;">Filter Enabled</label>
+                    <label style="margin: 0;">Filter Enabled <span class="help-icon" data-tooltip="Turns the word filter on or off globally for the server. If disabled, no messages will be scanned.">?</span></label>
                     <label class="switch">
                         <input type="checkbox" name="enabled" {% if config.enabled %}checked{% endif %}>
                         <span class="slider"></span>
                     </label>
                 </div>
 
-                <label>Active Profile</label>
+                <label>Active Profile <span class="help-icon" data-tooltip="The word list profile currently being used to scan messages. Only one profile can be active at a time. Create profiles on the left panel.">?</span></label>
                 <select name="active_profile_id">
                     <option value="">-- None --</option>
                     {% for p in profiles %}
@@ -80,10 +80,10 @@
                     {% endfor %}
                 </select>
 
-                <label>Violation Threshold</label>
+                <label>Violation Threshold <span class="help-icon" data-tooltip="How many filtered word hits a user accumulates before the bot takes action or reports them. Higher = more lenient.">?</span></label>
                 <input type="number" name="threshold" value="{{ config.threshold }}" min="1">
 
-                <label>Mod Report Channel</label>
+                <label>Mod Report Channel <span class="help-icon" data-tooltip="The channel where the bot sends a report whenever a violation is detected. Set to 'No Reports' to silently delete the message without alerting moderators.">?</span></label>
                 <select name="mod_channel_id">
                     <option value="">-- No Reports --</option>
                     {% for c in channels %}
@@ -106,7 +106,7 @@
                 </div>
             </div>
             
-            <label>Add Words (press Enter)</label>
+            <label>Add Words (press Enter) <span class="help-icon" data-tooltip="Type a word and press Enter to add it to this profile's banned word list. The filter will detect any message containing these words.">?</span></label>
             <input type="text" id="word_input" placeholder="type word..." onkeydown="if(event.key==='Enter') addWord()">
             
             <div class="tag-container" id="tag_container"></div>
