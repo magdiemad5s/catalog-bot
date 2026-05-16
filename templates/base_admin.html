@@ -100,54 +100,6 @@
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--primary); }
         input:checked + .slider:before { transform: translateX(20px); }
-
-        /* ── Global Tooltip System ── */
-        [data-tooltip] { position: relative; cursor: help; }
-        [data-tooltip]::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: calc(100% + 8px);
-            left: 50%;
-            transform: translateX(-50%);
-            background: #1c1c1f;
-            color: #e4e4e7;
-            border: 1px solid #3f3f46;
-            padding: 0.6rem 0.9rem;
-            border-radius: 8px;
-            font-size: 0.8rem;
-            font-weight: 400;
-            line-height: 1.5;
-            white-space: normal;
-            width: max-content;
-            max-width: 280px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-            pointer-events: none;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s ease, transform 0.2s ease;
-            transform: translateX(-50%) translateY(4px);
-            z-index: 9999;
-        }
-        [data-tooltip]::before {
-            content: '';
-            position: absolute;
-            bottom: calc(100% + 2px);
-            left: 50%;
-            transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: #3f3f46;
-            pointer-events: none;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s ease;
-            z-index: 9999;
-        }
-        [data-tooltip]:hover::after,
-        [data-tooltip]:hover::before {
-            opacity: 1;
-            visibility: visible;
-            transform: translateX(-50%) translateY(0);
-        }
         /* Help icon style */
         .help-icon {
             display: inline-flex; align-items: center; justify-content: center;
@@ -159,11 +111,32 @@
             position: relative;
         }
         .help-icon:hover { background: rgba(99, 102, 241, 0.4); }
+
+        /* JS Tooltip */
+        #tip {
+            position: fixed;
+            background: #1c1c1f;
+            color: #e4e4e7;
+            border: 1px solid #3f3f46;
+            padding: 0.6rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 400;
+            line-height: 1.5;
+            max-width: 280px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            pointer-events: none;
+            z-index: 99999;
+            display: none;
+            white-space: normal;
+            transition: opacity 0.15s ease;
+        }
     </style>
     {% block extra_style %}{% endblock %}
 </head>
 <body>
     <div id="toast-container"></div>
+    <div id="tip"></div>
 
     <aside class="sidebar">
         <div class="sidebar-header">
@@ -240,5 +213,36 @@
         }
     </script>
     {% block extra_script %}{% endblock %}
+
+    <script>
+        // Global JS tooltip system
+        const tip = document.getElementById('tip');
+        document.addEventListener('mouseover', e => {
+            const el = e.target.closest('[data-tooltip]');
+            if (!el) return;
+            const text = el.getAttribute('data-tooltip');
+            if (!text) return;
+            tip.textContent = text;
+            tip.style.display = 'block';
+            positionTip(e);
+        });
+        document.addEventListener('mousemove', e => {
+            if (tip.style.display === 'block') positionTip(e);
+        });
+        document.addEventListener('mouseout', e => {
+            const el = e.target.closest('[data-tooltip]');
+            if (el) tip.style.display = 'none';
+        });
+        function positionTip(e) {
+            const PAD = 12;
+            let x = e.clientX + PAD;
+            let y = e.clientY - tip.offsetHeight - PAD;
+            // Keep within viewport
+            if (x + tip.offsetWidth > window.innerWidth) x = e.clientX - tip.offsetWidth - PAD;
+            if (y < 0) y = e.clientY + PAD;
+            tip.style.left = x + 'px';
+            tip.style.top  = y + 'px';
+        }
+    </script>
 </body>
 </html>

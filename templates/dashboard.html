@@ -87,14 +87,14 @@
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div>
-                <label>Global AI Engine <i class="fas fa-question-circle"Turns the bot's AI text generation on or off completely." style="color: var(--text-muted); cursor: help; margin-left: 0.3rem;"></i></label>
+                <label>Global AI Engine <span class="help-icon" data-tooltip="Turns the bot's AI text generation on or off completely.">?</span></label>
                 <select name="ai_enabled">
                     <option value="true" {% if settings.ai_enabled %}selected{% endif %}>Online (Enabled)</option>
                     <option value="false" {% if not settings.ai_enabled %}selected{% endif %}>Suspended (Disabled)</option>
                 </select>
             </div>
             <div>
-                <label>Welcome Sequence module <i class="fas fa-question-circle"Enables or disables the bot greeting new users when they join the server." style="color: var(--text-muted); cursor: help; margin-left: 0.3rem;"></i></label>
+                <label>Welcome Sequence module <span class="help-icon" data-tooltip="Enables or disables the bot greeting new users when they join the server.">?</span></label>
                 <select name="welcome_enabled">
                     <option value="true" {% if settings.welcome_enabled %}selected{% endif %}>Active</option>
                     <option value="false" {% if not settings.welcome_enabled %}selected{% endif %}>Inactive</option>
@@ -102,29 +102,29 @@
             </div>
         </div>
         
-        <label style="margin-top: 1rem;">System Prompt Array (AI Character Directives) <i class="fas fa-question-circle"The core personality instructions given to the AI. This completely defines how the bot acts, talks, and behaves." style="color: var(--text-muted); cursor: help; margin-left: 0.3rem;"></i></label>
+        <label style="margin-top: 1rem;">System Prompt Array (AI Character Directives) <span class="help-icon" data-tooltip="The core personality instructions given to the AI. This completely defines how the bot acts, talks, and behaves.">?</span></label>
         <textarea id="sys_prompt_area" name="system_prompt" rows="8">{{ settings.system_prompt }}</textarea>
         
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
             <div>
-                <label>Rate Lmt Count <i class="fas fa-question-circle"Max AI messages a user can trigger within the Time Window." style="color: var(--text-muted); cursor: help; margin-left: 0.3rem;"></i></label>
+                <label>Rate Lmt Count <span class="help-icon" data-tooltip="Max AI messages a user can trigger within the Time Window.">?</span></label>
                 <input type="number" name="rate_limit_count" value="{{ settings.rate_limit_count }}">
             </div>
             <div>
-                <label>Rate Window (s) <i class="fas fa-question-circle"The time window in seconds before the Rate Limit resets for a user." style="color: var(--text-muted); cursor: help; margin-left: 0.3rem;"></i></label>
+                <label>Rate Window (s) <span class="help-icon" data-tooltip="The time window in seconds before the Rate Limit resets for a user.">?</span></label>
                 <input type="number" name="rate_limit_window" value="{{ settings.rate_limit_window }}">
             </div>
             <div>
-                <label>Reaction % <i class="fas fa-question-circle"The chance (0-100) that the bot will spontaneously react to a random message with an emoji." style="color: var(--text-muted); cursor: help; margin-left: 0.3rem;"></i></label>
+                <label>Reaction % <span class="help-icon" data-tooltip="The chance (0-100) that the bot will spontaneously react to a random message with an emoji.">?</span></label>
                 <input type="number" name="reaction_chance" value="{{ settings.reaction_chance }}" min="0" max="100">
             </div>
             <div>
-                <label>Intercept % <i class="fas fa-question-circle"The base chance (0-100) that the bot will spontaneously reply to a user's message unprompted, based on interception keywords." style="color: var(--text-muted); cursor: help; margin-left: 0.3rem;"></i></label>
+                <label>Intercept % <span class="help-icon" data-tooltip="The base chance (0-100) that the bot will spontaneously reply to a user's message unprompted, based on interception keywords.">?</span></label>
                 <input type="number" name="interception_chance" value="{{ settings.interception_chance }}" min="0" max="100">
             </div>
         </div>
         
-        <label>Interception Keywords (keyword:chance, ...) <i class="fas fa-question-circle"Specific words that make the bot more likely to intercept (reply unprompted). Format: word:multiplier. Example: 'library:2.0' means 'library' doubles the Intercept % chance." style="color: var(--text-muted); cursor: help; margin-left: 0.3rem;"></i></label>
+        <label>Interception Keywords (keyword:chance, ...) <span class="help-icon" data-tooltip="Specific words that make the bot more likely to intercept. Format: word:multiplier. Example: 'library:2.0' doubles the Intercept % chance when 'library' is mentioned.">?</span></label>
         <input type="text" name="interception_keywords" value="{{ settings.interception_keywords }}">
         
         <button type="submit" style="width: 100%; justify-content: center; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);">
