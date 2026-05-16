@@ -239,6 +239,13 @@ ADD COLUMN IF NOT EXISTS guild_id bigint,
 ADD COLUMN IF NOT EXISTS requires_password_change boolean not null default false,
 ADD COLUMN IF NOT EXISTS requires_setup boolean not null default false;
 
+-- Add guild_id to minigames
+ALTER TABLE minesweeper_sessions 
+ADD COLUMN IF NOT EXISTS guild_id bigint not null default 0;
+
+ALTER TABLE roulette_sessions 
+ADD COLUMN IF NOT EXISTS guild_id bigint not null default 0;
+
 -- NOTE: If you have existing admins, you should manually upgrade one to 'SUPER_ADMIN'
 -- UPDATE admin_users SET role = 'SUPER_ADMIN' WHERE username = 'YOUR_CURRENT_ADMIN';
 
