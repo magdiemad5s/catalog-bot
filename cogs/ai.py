@@ -492,7 +492,6 @@ class AI(commands.Cog, name="AI"):
             shared_guilds_text = f"\nServers you share with this user: {', '.join(shared_guilds)}"
 
         return (
-            f"{self.system_instruction}\n\n"
             f"You are currently talking to: {author.display_name}."
             f"{dossier_text}{flags_text}{shared_guilds_text}"
         )
